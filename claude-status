@@ -109,18 +109,78 @@ def get_ghostty_surface_id(pid):
     return None
 
 
-def main():
-    args = parse_args()
+CPU_THRESHOLD = 5.0  # percent above which a session is "active"
+
+
+def classify_status(cpu, state):
+    """Classify session status based on CPU usage and process state."""
+    if "T" in state:
+        return "stopped"
+    if cpu >= CPU_THRESHOLD:
+        return "active"
+    return "idle"
+
+
+def disambiguate_projects(sessions):
+    """If two sessions share a project basename, prepend parent dir."""
+    name_counts = {}
+    for s in sessions:
+        name = s["project"]
+        name_counts[name] = name_counts.get(name, 0) + 1
+
+    for s in sessions:
+        if name_counts[s["project"]] > 1 and s.get("cwd"):
+            parent = os.path.basename(os.path.dirname(s["cwd"]))
+            s["project"] = f"{parent}/{s['project']}"
+
+
+def collect_sessions():
+    """Collect all Claude Code session data."""
     pids = discover_claude_pids()
     if not pids:
-        print("No active Claude Code sessions found.")
-        return
-    info = get_process_info(pids)
-    for pid, data in info.items():
+        return []
+
+    proc_info = get_process_info(pids)
+    sessions = []
+
+    for pid in pids:
+        info = proc_info.get(pid)
+        if not info:
+            continue
+
+        # Skip processes without a TTY (headless/background)
+        if info["tty"] == "??" or info["tty"] == "":
+            continue
+
         cwd = get_cwd(pid)
         project = os.path.basename(cwd) if cwd else "unknown"
         surface_id = get_ghostty_surface_id(pid)
-        print(f"  PID {pid}: {project} cpu={data['cpu']}% tty={data['tty']} surface={surface_id}")
+        status = classify_status(info["cpu"], info["state"])
+
+        sessions.append(
+            {
+                "pid": pid,
+                "project": project,
+                "cwd": cwd,
+                "status": status,
+                "cpu": info["cpu"],
+                "tty": info["tty"],
+                "surface_id": surface_id,
+            }
+        )
+
+    disambiguate_projects(sessions)
+    return sessions
+
+
+def main():
+    args = parse_args()
+    sessions = collect_sessions()
+    if not sessions:
+        print("  No active Claude Code sessions found.")
+        return
+    for s in sessions:
+        print(f"  {s['status']:<8} {s['project']:<16} {s['tty']}")
 
 
 if __name__ == "__main__":
