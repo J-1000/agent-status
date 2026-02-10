@@ -1,0 +1,84 @@
+# claude-status — PRD
+
+## Problem
+
+When running multiple Claude Code instances across Ghostty tabs and splits, there's no quick way to see which sessions are active, idle, or waiting for input without cycling through each one manually.
+
+## Solution
+
+A single CLI command (`claude-status`) that prints a snapshot of all running Claude Code sessions, showing which project each belongs to, what Ghostty surface it lives in, and whether it's actively working or idle.
+
+## Non-Goals
+
+- No persistent daemon or background process
+- No TUI framework or interactive UI
+- No built-in todo/task management
+- No auto-switching to tabs (can be added later as a natural extension)
+
+## How It Works
+
+### Discovery
+
+1. Scan for running `claude` processes using `pgrep -x claude` or `ps -ax`
+2. For each process, resolve the working directory via `lsof -a -p <pid> -d cwd -Fn` to determine the project
+3. Read the process environment via `ps -p <pid> -wwwE` to extract `GHOSTTY_SURFACE_ID` (Ghostty injects this env var into each shell session)
+4. Read CPU usage via `ps -p <pid> -o %cpu=` to determine active vs idle (kernel-smoothed average, no manual sampling needed)
+
+### Status Classification
+
+| Status | Condition | Display |
+|---|---|---|
+| **active** | CPU usage above threshold (~5%) | `●` green |
+| **idle** | CPU usage near zero, process alive | `◐` yellow |
+| **stopped** | Process in stopped state | `■` grey |
+
+### Output Format
+
+```
+$ claude-status
+
+  ● api-server        active    a1b2c3d4
+  ◐ frontend          idle      e5f6a7b8
+  ● ml-pipeline       active    c9d0e1f2
+
+  3 sessions (2 active, 1 idle)
+```
+
+Columns: status icon, project name (derived from directory basename), status label, Ghostty surface ID (truncated). If two projects share the same basename, disambiguate by prepending the parent directory (e.g. `work/api-server`).
+
+If the terminal supports color, use ANSI colors for the status icons. Fall back to plain text gracefully.
+
+### Surface Identification
+
+Ghostty sets environment variables per surface (e.g. `GHOSTTY_SURFACE_ID`). The tool reads these from the process environment via `ps -p <pid> -wwwE` and parses out the variable. Surface IDs are opaque UUIDs — display them as a truncated 8-character hex prefix. There is no known public API to map surface IDs to tab indices, so don't attempt that mapping in v1.
+
+## CLI Interface
+
+```
+claude-status              # default: print snapshot and exit
+claude-status --watch      # re-print every 2 seconds (like `watch`)
+claude-status --json       # output as JSON for scripting/piping
+```
+
+No other flags for v1. Keep it minimal.
+
+## Technical Decisions
+
+- **Language:** Bash or Python. Bash is fine since the macOS introspection commands (`ps`, `lsof`) have straightforward output. Python if parsing gets messy. Pick whichever you'll iterate on faster.
+- **No dependencies:** Avoid external packages. Use only standard library / coreutils.
+- **Single file:** The entire tool should be one script, installable by copying it to `~/bin/`.
+- **macOS only:** Uses `ps` and `lsof` for process introspection. No Linux support needed for v1.
+
+## Open Questions to Resolve During Implementation
+
+1. **What exactly does `GHOSTTY_SURFACE_ID` contain?** Test by running `env | grep GHOSTTY` in different tabs and splits. Determine whether the value encodes tab index, split position, or is just an opaque UUID.
+2. **Does `ps -wwwE` reliably show the full environment?** Verify that `GHOSTTY_SURFACE_ID` appears in the output for Claude Code processes. If not, investigate alternatives like `KERN_PROCARGS2` sysctl.
+3. **How does Claude Code spawn processes?** It may fork child processes for tools, so we need to identify the right parent PID to avoid double-counting. Check the process tree.
+4. **Is `%cpu` from `ps` reliable for status?** Claude Code waiting for user input should show ~0% CPU. Claude Code streaming a response should show noticeable CPU. Validate this assumption.
+
+## Future Extensions (Not for v1)
+
+- **Tab switching:** `claude-status --goto <project>` that calls `ghostty +action` to focus the right surface
+- **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
+- **Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning Claude finished and is waiting for you)
+- **Task integration:** Read a `tasks.md` file and display alongside sessions
