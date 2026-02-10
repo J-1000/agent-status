@@ -2,6 +2,7 @@
 """claude-status — show running Claude Code sessions across Ghostty tabs."""
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -231,10 +232,23 @@ def format_table(sessions):
     return "\n".join(lines) + "\n"
 
 
+def format_json(sessions):
+    """Format sessions as JSON."""
+    return json.dumps(sessions, indent=2) + "\n"
+
+
+def print_snapshot(json_output=False):
+    """Collect and print one snapshot."""
+    sessions = collect_sessions()
+    if json_output:
+        sys.stdout.write(format_json(sessions))
+    else:
+        sys.stdout.write(format_table(sessions))
+
+
 def main():
     args = parse_args()
-    sessions = collect_sessions()
-    sys.stdout.write(format_table(sessions))
+    print_snapshot(json_output=args.json_output)
 
 
 if __name__ == "__main__":
