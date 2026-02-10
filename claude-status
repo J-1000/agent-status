@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 
 def parse_args():
@@ -246,9 +247,24 @@ def print_snapshot(json_output=False):
         sys.stdout.write(format_table(sessions))
 
 
+def clear_screen():
+    sys.stdout.write("\033[2J\033[H")
+    sys.stdout.flush()
+
+
 def main():
     args = parse_args()
-    print_snapshot(json_output=args.json_output)
+
+    if args.watch:
+        try:
+            while True:
+                clear_screen()
+                print_snapshot(json_output=args.json_output)
+                time.sleep(2)
+        except KeyboardInterrupt:
+            pass
+    else:
+        print_snapshot(json_output=args.json_output)
 
 
 if __name__ == "__main__":
