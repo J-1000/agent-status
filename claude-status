@@ -2,6 +2,7 @@
 """claude-status — show running Claude Code sessions across Ghostty tabs."""
 
 import argparse
+import os
 import subprocess
 import sys
 
@@ -75,6 +76,39 @@ def get_process_info(pids):
     return info
 
 
+def get_cwd(pid):
+    """Resolve working directory for a process via lsof."""
+    try:
+        result = subprocess.run(
+            ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+            capture_output=True,
+            text=True,
+        )
+        for line in result.stdout.strip().split("\n"):
+            if line.startswith("n"):
+                return line[1:]
+    except FileNotFoundError:
+        pass
+    return None
+
+
+def get_ghostty_surface_id(pid):
+    """Try to extract GHOSTTY_SURFACE_ID from process environment."""
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-wwwE"],
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout
+        for token in output.split():
+            if token.startswith("GHOSTTY_SURFACE_ID="):
+                return token.split("=", 1)[1]
+    except FileNotFoundError:
+        pass
+    return None
+
+
 def main():
     args = parse_args()
     pids = discover_claude_pids()
@@ -83,7 +117,10 @@ def main():
         return
     info = get_process_info(pids)
     for pid, data in info.items():
-        print(f"  PID {pid}: cpu={data['cpu']}% state={data['state']} tty={data['tty']}")
+        cwd = get_cwd(pid)
+        project = os.path.basename(cwd) if cwd else "unknown"
+        surface_id = get_ghostty_surface_id(pid)
+        print(f"  PID {pid}: {project} cpu={data['cpu']}% tty={data['tty']} surface={surface_id}")
 
 
 if __name__ == "__main__":
