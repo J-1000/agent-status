@@ -2,6 +2,7 @@
 """claude-status — show running Claude Code sessions across Ghostty tabs."""
 
 import argparse
+import subprocess
 import sys
 
 
@@ -18,9 +19,71 @@ def parse_args():
     return parser.parse_args()
 
 
+def discover_claude_pids():
+    """Find PIDs of running `claude` processes via ps (more reliable than pgrep)."""
+    try:
+        result = subprocess.run(
+            ["ps", "-ax", "-o", "pid=,comm="],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return []
+        pids = []
+        for line in result.stdout.strip().split("\n"):
+            parts = line.strip().split(None, 1)
+            if len(parts) == 2 and parts[1] == "claude":
+                pids.append(int(parts[0]))
+        return pids
+    except FileNotFoundError:
+        return []
+
+
+def get_process_info(pids):
+    """Get CPU%, state, and TTY for each PID in one ps call."""
+    if not pids:
+        return {}
+    pid_str = ",".join(str(p) for p in pids)
+    try:
+        result = subprocess.run(
+            ["ps", "-p", pid_str, "-o", "pid=,pcpu=,state=,tty="],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return {}
+    except FileNotFoundError:
+        return {}
+
+    info = {}
+    for line in result.stdout.strip().split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) >= 4:
+            pid = int(parts[0])
+            cpu = float(parts[1])
+            state = parts[2]
+            tty = parts[3]
+            info[pid] = {"cpu": cpu, "state": state, "tty": tty}
+        elif len(parts) == 3:
+            # tty might be missing (shows as ??)
+            pid = int(parts[0])
+            cpu = float(parts[1])
+            state = parts[2]
+            info[pid] = {"cpu": cpu, "state": state, "tty": "??"}
+    return info
+
+
 def main():
     args = parse_args()
-    print("No active Claude Code sessions found.")
+    pids = discover_claude_pids()
+    if not pids:
+        print("No active Claude Code sessions found.")
+        return
+    info = get_process_info(pids)
+    for pid, data in info.items():
+        print(f"  PID {pid}: cpu={data['cpu']}% state={data['state']} tty={data['tty']}")
 
 
 if __name__ == "__main__":
