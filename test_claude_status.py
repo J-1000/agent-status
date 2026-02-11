@@ -413,5 +413,79 @@ class TestCollectSessions(unittest.TestCase):
         self.assertEqual(sessions[2]["project"], "beta")
 
 
+class TestFocusGhottySurface(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_success(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0)
+        self.assertTrue(cs.focus_ghostty_surface("abc-123"))
+        mock_run.assert_called_once_with(
+            ["open", "ghostty://present-surface/abc-123"],
+            capture_output=True,
+            text=True,
+        )
+
+    @patch("subprocess.run")
+    def test_failure(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1)
+        self.assertFalse(cs.focus_ghostty_surface("abc-123"))
+
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_open_not_found(self, _mock):
+        self.assertFalse(cs.focus_ghostty_surface("abc-123"))
+
+
+class TestHandleGoto(unittest.TestCase):
+    def _make_session(self, project, surface_id="surf-1234"):
+        return {
+            "pid": 100,
+            "project": project,
+            "cwd": f"/home/user/{project}",
+            "branch": "main",
+            "status": "active",
+            "cpu": 10.0,
+            "tty": "ttys000",
+            "surface_id": surface_id,
+            "uptime_seconds": 60,
+            "uptime": "1m",
+        }
+
+    @patch.object(cs, "focus_ghostty_surface", return_value=True)
+    @patch.object(cs, "collect_sessions")
+    def test_exact_match_focuses(self, mock_collect, mock_focus):
+        mock_collect.return_value = [self._make_session("api-server")]
+        result = cs.handle_goto("api-server")
+        self.assertEqual(result, 0)
+        mock_focus.assert_called_once_with("surf-1234")
+
+    @patch.object(cs, "focus_ghostty_surface", return_value=True)
+    @patch.object(cs, "collect_sessions")
+    def test_case_insensitive_substring(self, mock_collect, mock_focus):
+        mock_collect.return_value = [self._make_session("api-server")]
+        result = cs.handle_goto("API")
+        self.assertEqual(result, 0)
+        mock_focus.assert_called_once_with("surf-1234")
+
+    @patch.object(cs, "collect_sessions")
+    def test_no_match(self, mock_collect):
+        mock_collect.return_value = [self._make_session("api-server")]
+        result = cs.handle_goto("nonexistent")
+        self.assertEqual(result, 1)
+
+    @patch.object(cs, "collect_sessions")
+    def test_multiple_matches(self, mock_collect):
+        mock_collect.return_value = [
+            self._make_session("api-server"),
+            self._make_session("api-worker"),
+        ]
+        result = cs.handle_goto("api")
+        self.assertEqual(result, 1)
+
+    @patch.object(cs, "collect_sessions")
+    def test_no_surface_id(self, mock_collect):
+        mock_collect.return_value = [self._make_session("api-server", surface_id=None)]
+        result = cs.handle_goto("api-server")
+        self.assertEqual(result, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

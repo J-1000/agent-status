@@ -55,12 +55,21 @@ Ghostty sets environment variables per surface (e.g. `GHOSTTY_SURFACE_ID`). The 
 ## CLI Interface
 
 ```
-claude-status              # default: print snapshot and exit
-claude-status --watch      # re-print every 2 seconds (like `watch`)
-claude-status --json       # output as JSON for scripting/piping
+claude-status                      # default: print snapshot and exit
+claude-status --watch              # re-print every 2 seconds (like `watch`)
+claude-status --watch --interval 5 # custom refresh interval
+claude-status --json               # output as JSON for scripting/piping
+claude-status --goto <project>     # focus the Ghostty tab for a session
 ```
 
-No other flags for v1. Keep it minimal.
+### Tab Switching (`--goto`)
+
+`claude-status --goto <project>` focuses the Ghostty surface running the matching session. The argument is a case-insensitive substring match on the project name. Behavior:
+
+- **0 matches:** prints an error and lists available sessions (exit 1)
+- **Multiple matches:** prints matching sessions and asks to be more specific (exit 1)
+- **Match has no surface ID:** prints an error explaining it's not in Ghostty (exit 1)
+- **Single match:** calls `open "ghostty://present-surface/<surface_id>"` to focus the tab (exit 0)
 
 ## Technical Decisions
 
@@ -76,9 +85,8 @@ No other flags for v1. Keep it minimal.
 3. **How does Claude Code spawn processes?** It may fork child processes for tools, so we need to identify the right parent PID to avoid double-counting. Check the process tree.
 4. **Is `%cpu` from `ps` reliable for status?** Claude Code waiting for user input should show ~0% CPU. Claude Code streaming a response should show noticeable CPU. Validate this assumption.
 
-## Future Extensions (Not for v1)
+## Future Extensions
 
-- **Tab switching:** `claude-status --goto <project>` that calls `ghostty +action` to focus the right surface
 - **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
 - **Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning Claude finished and is waiting for you)
 - **Task integration:** Read a `tasks.md` file and display alongside sessions

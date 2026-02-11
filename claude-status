@@ -24,6 +24,10 @@ def parse_args():
     parser.add_argument(
         "--json", action="store_true", dest="json_output", help="output as JSON"
     )
+    parser.add_argument(
+        "--goto", metavar="PROJECT",
+        help="focus the Ghostty tab running a session matching PROJECT",
+    )
     return parser.parse_args()
 
 
@@ -348,8 +352,59 @@ def clear_screen():
     sys.stdout.flush()
 
 
+def focus_ghostty_surface(surface_id):
+    """Focus a Ghostty surface via its URL scheme. Returns True on success."""
+    try:
+        result = subprocess.run(
+            ["open", f"ghostty://present-surface/{surface_id}"],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def handle_goto(project_query):
+    """Find a session by project name and focus its Ghostty surface."""
+    sessions = collect_sessions()
+    query = project_query.lower()
+    matches = [s for s in sessions if query in s["project"].lower()]
+
+    if not matches:
+        sys.stderr.write(f"  No session matching '{project_query}'.\n")
+        if sessions:
+            sys.stderr.write("  Available sessions:\n")
+            for s in sessions:
+                sys.stderr.write(f"    - {s['project']}\n")
+        return 1
+
+    if len(matches) > 1:
+        sys.stderr.write(f"  Multiple sessions match '{project_query}':\n")
+        for s in matches:
+            sys.stderr.write(f"    - {s['project']}\n")
+        sys.stderr.write("  Be more specific.\n")
+        return 1
+
+    session = matches[0]
+    if not session.get("surface_id"):
+        sys.stderr.write(f"  Session '{session['project']}' has no Ghostty surface ID.\n")
+        sys.stderr.write("  It may not be running inside Ghostty.\n")
+        return 1
+
+    if focus_ghostty_surface(session["surface_id"]):
+        sys.stdout.write(f"  Focused: {session['project']}\n")
+        return 0
+    else:
+        sys.stderr.write(f"  Failed to focus surface for '{session['project']}'.\n")
+        return 1
+
+
 def main():
     args = parse_args()
+
+    if args.goto:
+        sys.exit(handle_goto(args.goto))
 
     if args.watch:
         try:
