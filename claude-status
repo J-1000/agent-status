@@ -228,7 +228,8 @@ def format_table(sessions):
             parts.append(f"{counts[status]} {status}")
 
     lines.append("")
-    lines.append(f"  {total} sessions ({', '.join(parts)})")
+    noun = "session" if total == 1 else "sessions"
+    lines.append(f"  {total} {noun} ({', '.join(parts)})")
 
     return "\n".join(lines) + "\n"
 

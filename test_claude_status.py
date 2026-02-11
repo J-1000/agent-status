@@ -91,7 +91,7 @@ class TestFormatTable(unittest.TestCase):
         self.assertIn("myproject", result)
         self.assertIn("active", result)
         self.assertIn("ttys001", result)
-        self.assertIn("1 sessions (1 active)", result)
+        self.assertIn("1 session (1 active)", result)
 
     @patch.object(cs, "supports_color", return_value=False)
     def test_surface_id_shown_when_available(self, _mock):
