@@ -275,6 +275,29 @@ class TestCollectSessions(unittest.TestCase):
         sessions = cs.collect_sessions()
         self.assertEqual(sessions, [])
 
+    @patch.object(cs, "get_ghostty_surface_id", return_value=None)
+    @patch.object(cs, "get_cwd", side_effect=lambda pid: {
+        1: "/home/user/zebra",
+        2: "/home/user/alpha",
+        3: "/home/user/beta",
+    }[pid])
+    @patch.object(cs, "get_process_info", return_value={
+        1: {"cpu": 0.0, "state": "S", "tty": "ttys000"},
+        2: {"cpu": 15.0, "state": "R+", "tty": "ttys001"},
+        3: {"cpu": 0.0, "state": "T", "tty": "ttys002"},
+    })
+    @patch.object(cs, "discover_claude_pids", return_value=[1, 2, 3])
+    def test_sorted_by_status_then_project(self, *_mocks):
+        sessions = cs.collect_sessions()
+        self.assertEqual(len(sessions), 3)
+        # active first, then idle, then stopped
+        self.assertEqual(sessions[0]["status"], "active")
+        self.assertEqual(sessions[0]["project"], "alpha")
+        self.assertEqual(sessions[1]["status"], "idle")
+        self.assertEqual(sessions[1]["project"], "zebra")
+        self.assertEqual(sessions[2]["status"], "stopped")
+        self.assertEqual(sessions[2]["project"], "beta")
+
 
 if __name__ == "__main__":
     unittest.main()

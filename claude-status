@@ -175,6 +175,11 @@ def collect_sessions():
         )
 
     disambiguate_projects(sessions)
+
+    # Sort: active first, then idle, then stopped; alphabetical within each group
+    status_order = {"active": 0, "idle": 1, "stopped": 2}
+    sessions.sort(key=lambda s: (status_order.get(s["status"], 9), s["project"]))
+
     return sessions
 
 
