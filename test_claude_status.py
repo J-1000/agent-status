@@ -3,6 +3,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import unittest
 from unittest.mock import patch, MagicMock
@@ -133,6 +134,29 @@ class TestGetUptime(unittest.TestCase):
         self.assertEqual(fmt, "-")
 
 
+class TestGetGitBranch(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_extracts_branch(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="main\n")
+        self.assertEqual(cs.get_git_branch("/some/repo"), "main")
+
+    @patch("subprocess.run")
+    def test_not_a_git_repo(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=128, stdout="")
+        self.assertIsNone(cs.get_git_branch("/not/a/repo"))
+
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_git_not_installed(self, _mock):
+        self.assertIsNone(cs.get_git_branch("/some/dir"))
+
+    def test_none_cwd(self):
+        self.assertIsNone(cs.get_git_branch(None))
+
+    @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="git", timeout=2))
+    def test_timeout(self, _mock):
+        self.assertIsNone(cs.get_git_branch("/slow/repo"))
+
+
 class TestFormatTable(unittest.TestCase):
     def test_empty_sessions(self):
         result = cs.format_table([])
@@ -146,12 +170,14 @@ class TestFormatTable(unittest.TestCase):
                 "status": "active",
                 "surface_id": None,
                 "tty": "ttys001",
+                "branch": "main",
                 "uptime": "2h15m",
             }
         ]
         result = cs.format_table(sessions)
         self.assertIn("\u25cf", result)  # active icon
         self.assertIn("myproject", result)
+        self.assertIn("main", result)
         self.assertIn("active", result)
         self.assertIn("2h15m", result)
         self.assertIn("ttys001", result)
@@ -165,6 +191,7 @@ class TestFormatTable(unittest.TestCase):
                 "status": "idle",
                 "surface_id": "a1b2c3d4e5f6a7b8",
                 "tty": "ttys001",
+                "branch": "feature/ui",
                 "uptime": "45m",
             }
         ]
@@ -173,12 +200,27 @@ class TestFormatTable(unittest.TestCase):
         self.assertNotIn("ttys001", result)  # tty not shown when surface_id exists
 
     @patch.object(cs, "supports_color", return_value=False)
+    def test_no_branch_shows_dash(self, _mock):
+        sessions = [
+            {
+                "project": "proj",
+                "status": "idle",
+                "surface_id": None,
+                "tty": "t1",
+                "branch": None,
+                "uptime": "5m",
+            }
+        ]
+        result = cs.format_table(sessions)
+        self.assertIn("-", result)
+
+    @patch.object(cs, "supports_color", return_value=False)
     def test_summary_counts(self, _mock):
         sessions = [
-            {"project": "a", "status": "active", "surface_id": None, "tty": "t1", "uptime": "1m"},
-            {"project": "b", "status": "active", "surface_id": None, "tty": "t2", "uptime": "2m"},
-            {"project": "c", "status": "idle", "surface_id": None, "tty": "t3", "uptime": "3m"},
-            {"project": "d", "status": "stopped", "surface_id": None, "tty": "t4", "uptime": "4m"},
+            {"project": "a", "status": "active", "surface_id": None, "tty": "t1", "branch": "main", "uptime": "1m"},
+            {"project": "b", "status": "active", "surface_id": None, "tty": "t2", "branch": "main", "uptime": "2m"},
+            {"project": "c", "status": "idle", "surface_id": None, "tty": "t3", "branch": "dev", "uptime": "3m"},
+            {"project": "d", "status": "stopped", "surface_id": None, "tty": "t4", "branch": None, "uptime": "4m"},
         ]
         result = cs.format_table(sessions)
         self.assertIn("4 sessions", result)
@@ -189,7 +231,7 @@ class TestFormatTable(unittest.TestCase):
     @patch.object(cs, "supports_color", return_value=True)
     def test_color_output(self, _mock):
         sessions = [
-            {"project": "proj", "status": "active", "surface_id": None, "tty": "t1", "uptime": "5m"},
+            {"project": "proj", "status": "active", "surface_id": None, "tty": "t1", "branch": "main", "uptime": "5m"},
         ]
         result = cs.format_table(sessions)
         self.assertIn("\033[32m", result)  # green
@@ -321,6 +363,7 @@ class TestSupportsColor(unittest.TestCase):
 
 
 class TestCollectSessions(unittest.TestCase):
+    @patch.object(cs, "get_git_branch", return_value="main")
     @patch.object(cs, "get_uptime", return_value=(120, "2m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value=None)
     @patch.object(cs, "get_cwd", return_value="/home/user/myproject")
@@ -337,12 +380,14 @@ class TestCollectSessions(unittest.TestCase):
         self.assertEqual(sessions[0]["status"], "active")
         self.assertEqual(sessions[0]["uptime_seconds"], 120)
         self.assertEqual(sessions[0]["uptime"], "2m")
+        self.assertEqual(sessions[0]["branch"], "main")
 
     @patch.object(cs, "discover_claude_pids", return_value=[])
     def test_no_processes(self, _mock):
         sessions = cs.collect_sessions()
         self.assertEqual(sessions, [])
 
+    @patch.object(cs, "get_git_branch", return_value="dev")
     @patch.object(cs, "get_uptime", return_value=(60, "1m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value=None)
     @patch.object(cs, "get_cwd", side_effect=lambda pid: {
