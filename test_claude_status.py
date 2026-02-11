@@ -195,6 +195,16 @@ class TestGetProcessInfo(unittest.TestCase):
         info = cs.get_process_info([])
         self.assertEqual(info, {})
 
+    @patch("subprocess.run")
+    def test_skips_malformed_lines(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="  123  10.5 R+  ttys000\n  bad  NaN S  ttys001\n  short\n",
+        )
+        info = cs.get_process_info([123])
+        self.assertEqual(len(info), 1)
+        self.assertIn(123, info)
+
 
 class TestGetCwd(unittest.TestCase):
     @patch("subprocess.run")
