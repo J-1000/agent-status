@@ -330,6 +330,41 @@ class TestGetCwd(unittest.TestCase):
         self.assertIsNone(cwd)
 
 
+class TestGetCwds(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_parses_multi_pid_output(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="p123\nfcwd\nn/Users/test/project\np456\nfcwd\nn/home/user/other\n",
+        )
+        result = cs.get_cwds([123, 456])
+        self.assertEqual(result, {123: "/Users/test/project", 456: "/home/user/other"})
+
+    def test_empty_pids(self):
+        result = cs.get_cwds([])
+        self.assertEqual(result, {})
+
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_lsof_not_found(self, _mock):
+        result = cs.get_cwds([123])
+        self.assertEqual(result, {})
+
+    @patch("subprocess.run")
+    def test_lsof_failure(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        result = cs.get_cwds([123])
+        self.assertEqual(result, {})
+
+    @patch("subprocess.run")
+    def test_pid_with_no_cwd_line(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="p123\nfcwd\nn/Users/test/project\np456\n",
+        )
+        result = cs.get_cwds([123, 456])
+        self.assertEqual(result, {123: "/Users/test/project"})
+
+
 class TestGetGhottySurfaceId(unittest.TestCase):
     @patch("subprocess.run")
     def test_extracts_surface_id(self, mock_run):
@@ -366,7 +401,7 @@ class TestCollectSessions(unittest.TestCase):
     @patch.object(cs, "get_git_branch", return_value="main")
     @patch.object(cs, "get_uptime", return_value=(120, "2m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value=None)
-    @patch.object(cs, "get_cwd", return_value="/home/user/myproject")
+    @patch.object(cs, "get_cwds", return_value={100: "/home/user/myproject"})
     @patch.object(cs, "get_process_info", return_value={
         100: {"cpu": 15.0, "state": "R+", "tty": "ttys000"},
         200: {"cpu": 0.0, "state": "S", "tty": "??"},
@@ -390,11 +425,11 @@ class TestCollectSessions(unittest.TestCase):
     @patch.object(cs, "get_git_branch", return_value="dev")
     @patch.object(cs, "get_uptime", return_value=(60, "1m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value=None)
-    @patch.object(cs, "get_cwd", side_effect=lambda pid: {
+    @patch.object(cs, "get_cwds", return_value={
         1: "/home/user/zebra",
         2: "/home/user/alpha",
         3: "/home/user/beta",
-    }[pid])
+    })
     @patch.object(cs, "get_process_info", return_value={
         1: {"cpu": 0.0, "state": "S", "tty": "ttys000"},
         2: {"cpu": 15.0, "state": "R+", "tty": "ttys001"},
@@ -411,6 +446,56 @@ class TestCollectSessions(unittest.TestCase):
         self.assertEqual(sessions[1]["project"], "zebra")
         self.assertEqual(sessions[2]["status"], "stopped")
         self.assertEqual(sessions[2]["project"], "beta")
+
+    @patch.object(cs, "get_git_branch", return_value="main")
+    @patch.object(cs, "get_uptime", return_value=(60, "1m"))
+    @patch.object(cs, "get_ghostty_surface_id", return_value="surf-abc")
+    @patch.object(cs, "get_cwds", return_value={100: "/home/user/proj"})
+    @patch.object(cs, "get_process_info", return_value={
+        100: {"cpu": 5.0, "state": "R+", "tty": "ttys000"},
+    })
+    @patch.object(cs, "discover_claude_pids", return_value=[100])
+    def test_cache_populated_on_first_call(self, *_mocks):
+        cache = {}
+        cs.collect_sessions(cache=cache)
+        self.assertIn(100, cache)
+        self.assertEqual(cache[100]["cwd"], "/home/user/proj")
+        self.assertEqual(cache[100]["surface_id"], "surf-abc")
+
+    @patch.object(cs, "get_git_branch", return_value="main")
+    @patch.object(cs, "get_uptime", return_value=(60, "1m"))
+    @patch.object(cs, "get_ghostty_surface_id", return_value="surf-abc")
+    @patch.object(cs, "get_cwds", return_value={})
+    @patch.object(cs, "get_process_info", return_value={
+        100: {"cpu": 5.0, "state": "R+", "tty": "ttys000"},
+    })
+    @patch.object(cs, "discover_claude_pids", return_value=[100])
+    def test_cache_reused_on_second_call(self, mock_pids, mock_info, mock_cwds, mock_sid, *_):
+        cache = {100: {"cwd": "/home/user/proj", "surface_id": "surf-abc"}}
+        sessions = cs.collect_sessions(cache=cache)
+        # get_cwds should NOT be called (no new PIDs)
+        mock_cwds.assert_not_called()
+        # get_ghostty_surface_id should NOT be called (cached)
+        mock_sid.assert_not_called()
+        self.assertEqual(sessions[0]["cwd"], "/home/user/proj")
+        self.assertEqual(sessions[0]["surface_id"], "surf-abc")
+
+    @patch.object(cs, "get_git_branch", return_value="main")
+    @patch.object(cs, "get_uptime", return_value=(60, "1m"))
+    @patch.object(cs, "get_ghostty_surface_id", return_value=None)
+    @patch.object(cs, "get_cwds", return_value={})
+    @patch.object(cs, "get_process_info", return_value={
+        200: {"cpu": 0.0, "state": "S", "tty": "ttys001"},
+    })
+    @patch.object(cs, "discover_claude_pids", return_value=[200])
+    def test_stale_pids_pruned_from_cache(self, *_mocks):
+        cache = {
+            100: {"cwd": "/old/path", "surface_id": "old-surf"},
+            200: {"cwd": "/home/user/proj", "surface_id": None},
+        }
+        cs.collect_sessions(cache=cache)
+        self.assertNotIn(100, cache)
+        self.assertIn(200, cache)
 
 
 class TestFocusGhottySurface(unittest.TestCase):

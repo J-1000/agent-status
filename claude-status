@@ -101,6 +101,37 @@ def get_cwd(pid):
     return None
 
 
+def get_cwds(pids):
+    """Resolve working directories for multiple PIDs in a single lsof call."""
+    if not pids:
+        return {}
+    pid_str = ",".join(str(p) for p in pids)
+    try:
+        result = subprocess.run(
+            ["lsof", "-a", "-p", pid_str, "-d", "cwd", "-Fn"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0 and not result.stdout.strip():
+            return {}
+    except FileNotFoundError:
+        return {}
+
+    cwds = {}
+    current_pid = None
+    for line in result.stdout.strip().split("\n"):
+        if not line:
+            continue
+        if line.startswith("p"):
+            try:
+                current_pid = int(line[1:])
+            except ValueError:
+                current_pid = None
+        elif line.startswith("n") and current_pid is not None:
+            cwds[current_pid] = line[1:]
+    return cwds
+
+
 def get_ghostty_surface_id(pid):
     """Try to extract GHOSTTY_SURFACE_ID from process environment."""
     try:
@@ -212,8 +243,12 @@ def disambiguate_projects(sessions):
             s["project"] = f"{parent}/{s['project']}"
 
 
-def collect_sessions():
-    """Collect all Claude Code session data."""
+def collect_sessions(cache=None):
+    """Collect all Claude Code session data.
+
+    If cache (dict) is provided, CWD and surface_id are cached across calls
+    and only fetched for newly discovered PIDs.  Stale entries are pruned.
+    """
     pids = discover_claude_pids()
     if not pids:
         return []
@@ -226,25 +261,59 @@ def collect_sessions():
         if pid in proc_info and proc_info[pid]["tty"] not in ("??", "")
     ]
 
-    # Fetch cwd, surface_id, and uptime in parallel to avoid N+1 subprocess overhead
+    # Separate cached vs uncached PIDs
+    if cache is not None:
+        cached_pids = [p for p in valid_pids if p in cache]
+        new_pids = [p for p in valid_pids if p not in cache]
+        # Prune stale entries
+        for stale in set(cache) - set(valid_pids):
+            del cache[stale]
+    else:
+        cached_pids = []
+        new_pids = valid_pids
+
+    # Batch lsof for new PIDs only
+    cwd_results = {}
+    if cache is not None:
+        for pid in cached_pids:
+            cwd_results[pid] = cache[pid]["cwd"]
+    if new_pids:
+        cwd_results.update(get_cwds(new_pids))
+
+    # Fetch surface_id + uptime in parallel (surface_id only for new PIDs)
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        cwd_futures = {pid: pool.submit(get_cwd, pid) for pid in valid_pids}
-        sid_futures = {pid: pool.submit(get_ghostty_surface_id, pid) for pid in valid_pids}
+        sid_futures = {pid: pool.submit(get_ghostty_surface_id, pid) for pid in new_pids}
         uptime_futures = {pid: pool.submit(get_uptime, pid) for pid in valid_pids}
 
-        # Collect cwd results first, then submit branch lookups (branch depends on cwd)
-        cwd_results = {pid: cwd_futures[pid].result() for pid in valid_pids}
-        branch_futures = {pid: pool.submit(get_git_branch, cwd_results[pid]) for pid in valid_pids}
+        # Dedup git branch lookups by unique CWD
+        unique_cwds = set(cwd_results.values()) - {None}
+        branch_futures = {cwd: pool.submit(get_git_branch, cwd) for cwd in unique_cwds}
+
+    # Collect surface_id results, merge with cache
+    sid_results = {}
+    if cache is not None:
+        for pid in cached_pids:
+            sid_results[pid] = cache[pid]["surface_id"]
+    for pid in new_pids:
+        sid_results[pid] = sid_futures[pid].result()
+
+    # Update cache with new entries
+    if cache is not None:
+        for pid in new_pids:
+            cache[pid] = {"cwd": cwd_results.get(pid), "surface_id": sid_results.get(pid)}
+
+    # Resolve branches (deduped)
+    branch_results = {cwd: f.result() for cwd, f in branch_futures.items()}
 
     sessions = []
     for pid in valid_pids:
         info = proc_info[pid]
-        cwd = cwd_results[pid]
+        cwd = cwd_results.get(pid)
         project = os.path.basename(cwd) if cwd else "unknown"
-        surface_id = sid_futures[pid].result()
+        surface_id = sid_results.get(pid)
         status = classify_status(info["cpu"], info["state"])
         uptime_seconds, uptime = uptime_futures[pid].result()
-        branch = branch_futures[pid].result()
+        branch = branch_results.get(cwd)
 
         sessions.append(
             {
@@ -338,9 +407,9 @@ def format_json(sessions):
     return json.dumps(sessions, indent=2) + "\n"
 
 
-def print_snapshot(json_output=False):
+def print_snapshot(json_output=False, cache=None):
     """Collect and print one snapshot."""
-    sessions = collect_sessions()
+    sessions = collect_sessions(cache=cache)
     if json_output:
         sys.stdout.write(format_json(sessions))
     else:
@@ -407,10 +476,11 @@ def main():
         sys.exit(handle_goto(args.goto))
 
     if args.watch:
+        cache = {}
         try:
             while True:
                 clear_screen()
-                print_snapshot(json_output=args.json_output)
+                print_snapshot(json_output=args.json_output, cache=cache)
                 time.sleep(args.interval)
         except KeyboardInterrupt:
             pass
