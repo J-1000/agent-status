@@ -45,8 +45,10 @@ The argument is a case-insensitive substring match on the project name. If there
 
 1. Discovers running `claude` processes via `ps`
 2. Resolves each process's working directory via `lsof` to determine the project
-3. Extracts `GHOSTTY_SURFACE_ID` from the process environment to identify which tab/split each session lives in
-4. Classifies status based on CPU usage: **active** (>5% CPU), **idle** (~0% CPU), or **stopped**
+3. Detects the git branch for each project via `git rev-parse`
+4. Extracts `GHOSTTY_SURFACE_ID` from the process environment to identify which tab/split each session lives in
+5. Reads process uptime via `ps etime`
+6. Classifies status based on CPU usage: **active** (>5% CPU), **idle** (~0% CPU), or **stopped**
 
 ## Requirements
 
