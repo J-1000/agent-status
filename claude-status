@@ -2,6 +2,7 @@
 """claude-status — show running Claude Code sessions across Ghostty tabs."""
 
 import argparse
+import concurrent.futures
 import json
 import os
 import subprocess
@@ -141,20 +142,24 @@ def collect_sessions():
         return []
 
     proc_info = get_process_info(pids)
+
+    # Filter to TTY-attached processes before doing per-PID lookups
+    valid_pids = [
+        pid for pid in pids
+        if pid in proc_info and proc_info[pid]["tty"] not in ("??", "")
+    ]
+
+    # Fetch cwd and surface_id in parallel to avoid N+1 subprocess overhead
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        cwd_futures = {pid: pool.submit(get_cwd, pid) for pid in valid_pids}
+        sid_futures = {pid: pool.submit(get_ghostty_surface_id, pid) for pid in valid_pids}
+
     sessions = []
-
-    for pid in pids:
-        info = proc_info.get(pid)
-        if not info:
-            continue
-
-        # Skip processes without a TTY (headless/background)
-        if info["tty"] == "??" or info["tty"] == "":
-            continue
-
-        cwd = get_cwd(pid)
+    for pid in valid_pids:
+        info = proc_info[pid]
+        cwd = cwd_futures[pid].result()
         project = os.path.basename(cwd) if cwd else "unknown"
-        surface_id = get_ghostty_surface_id(pid)
+        surface_id = sid_futures[pid].result()
         status = classify_status(info["cpu"], info["state"])
 
         sessions.append(
