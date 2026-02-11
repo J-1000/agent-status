@@ -114,6 +114,57 @@ def get_ghostty_surface_id(pid):
     return None
 
 
+def parse_etime(etime):
+    """Parse ps etime format [[DD-]HH:]MM:SS to total seconds."""
+    etime = etime.strip()
+    days = 0
+    if "-" in etime:
+        day_part, etime = etime.split("-", 1)
+        days = int(day_part)
+    parts = etime.split(":")
+    if len(parts) == 3:
+        hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
+    elif len(parts) == 2:
+        hours = 0
+        minutes, seconds = int(parts[0]), int(parts[1])
+    else:
+        return 0
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
+def format_duration(seconds):
+    """Format seconds as a human-readable short duration string."""
+    if seconds is None:
+        return "-"
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        return f"{h}h{m}m" if m else f"{h}h"
+    d = seconds // 86400
+    h = (seconds % 86400) // 3600
+    return f"{d}d{h}h" if h else f"{d}d"
+
+
+def get_uptime(pid):
+    """Get process uptime via ps etime. Returns (seconds, formatted) or (None, '-')."""
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "etime="],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            secs = parse_etime(result.stdout)
+            return (secs, format_duration(secs))
+    except FileNotFoundError:
+        pass
+    return (None, "-")
+
+
 CPU_THRESHOLD = 5.0  # percent above which a session is "active"
 
 
@@ -153,10 +204,11 @@ def collect_sessions():
         if pid in proc_info and proc_info[pid]["tty"] not in ("??", "")
     ]
 
-    # Fetch cwd and surface_id in parallel to avoid N+1 subprocess overhead
+    # Fetch cwd, surface_id, and uptime in parallel to avoid N+1 subprocess overhead
     with concurrent.futures.ThreadPoolExecutor() as pool:
         cwd_futures = {pid: pool.submit(get_cwd, pid) for pid in valid_pids}
         sid_futures = {pid: pool.submit(get_ghostty_surface_id, pid) for pid in valid_pids}
+        uptime_futures = {pid: pool.submit(get_uptime, pid) for pid in valid_pids}
 
     sessions = []
     for pid in valid_pids:
@@ -165,6 +217,7 @@ def collect_sessions():
         project = os.path.basename(cwd) if cwd else "unknown"
         surface_id = sid_futures[pid].result()
         status = classify_status(info["cpu"], info["state"])
+        uptime_seconds, uptime = uptime_futures[pid].result()
 
         sessions.append(
             {
@@ -175,6 +228,8 @@ def collect_sessions():
                 "cpu": info["cpu"],
                 "tty": info["tty"],
                 "surface_id": surface_id,
+                "uptime_seconds": uptime_seconds,
+                "uptime": uptime,
             }
         )
 
@@ -213,11 +268,13 @@ def format_table(sessions):
     # Calculate column widths
     max_project = max(len(s["project"]) for s in sessions)
     max_label = max(len(STATUS_DISPLAY[s["status"]]["label"]) for s in sessions)
+    max_uptime = max(len(s.get("uptime", "-")) for s in sessions)
 
     for s in sessions:
         disp = STATUS_DISPLAY[s["status"]]
         icon = disp["icon"]
         label = disp["label"]
+        uptime = s.get("uptime", "-")
         identifier = s["surface_id"][:8] if s["surface_id"] else s["tty"]
 
         if use_color:
@@ -225,7 +282,7 @@ def format_table(sessions):
         else:
             icon_str = icon
 
-        line = f"  {icon_str} {s['project']:<{max_project}}  {label:<{max_label}}  {identifier}"
+        line = f"  {icon_str} {s['project']:<{max_project}}  {label:<{max_label}}  {uptime:<{max_uptime}}  {identifier}"
         lines.append(line)
 
     # Summary
