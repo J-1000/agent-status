@@ -15,7 +15,11 @@ def parse_args():
         description="Show running Claude Code sessions",
     )
     parser.add_argument(
-        "--watch", action="store_true", help="re-print every 2 seconds"
+        "--watch", action="store_true", help="re-print continuously"
+    )
+    parser.add_argument(
+        "--interval", type=float, default=2.0, metavar="SECS",
+        help="refresh interval for --watch in seconds (default: 2)",
     )
     parser.add_argument(
         "--json", action="store_true", dest="json_output", help="output as JSON"
@@ -269,7 +273,7 @@ def main():
             while True:
                 clear_screen()
                 print_snapshot(json_output=args.json_output)
-                time.sleep(2)
+                time.sleep(args.interval)
         except KeyboardInterrupt:
             pass
     else:

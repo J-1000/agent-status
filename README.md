@@ -24,9 +24,10 @@ chmod +x ~/bin/claude-status
 ## Usage
 
 ```
-claude-status              # print snapshot and exit
-claude-status --watch      # re-print every 2 seconds
-claude-status --json       # output as JSON for scripting
+claude-status                      # print snapshot and exit
+claude-status --watch              # re-print every 2 seconds
+claude-status --watch --interval 5 # re-print every 5 seconds
+claude-status --json               # output as JSON for scripting
 ```
 
 ## How it works
