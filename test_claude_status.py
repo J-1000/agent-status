@@ -21,6 +21,39 @@ cs = importlib.util.module_from_spec(_spec)
 _loader.exec_module(cs)
 
 
+class TestSendBell(unittest.TestCase):
+    def test_writes_bell_to_stdout(self):
+        mock_stdout = MagicMock()
+        with patch.object(cs.sys, "stdout", mock_stdout):
+            cs.send_bell()
+        mock_stdout.write.assert_called_once_with("\a")
+        mock_stdout.flush.assert_called_once()
+
+
+class TestSendNotification(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_calls_osascript_with_project(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0)
+        cs.send_notification({"project": "my-api"})
+        args = mock_run.call_args[0][0]
+        self.assertEqual(args[0], "osascript")
+        self.assertIn("my-api", args[2])
+        self.assertIn("display notification", args[2])
+
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_osascript_not_found_silenced(self, _mock):
+        cs.send_notification({"project": "test"})  # should not raise
+
+    @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="osascript", timeout=5))
+    def test_osascript_timeout_silenced(self, _mock):
+        cs.send_notification({"project": "test"})  # should not raise
+
+    @patch("subprocess.run")
+    def test_nonzero_exit_silenced(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1)
+        cs.send_notification({"project": "test"})  # should not raise
+
+
 class TestDetectTransitions(unittest.TestCase):
     def test_active_to_idle_detected(self):
         prev = {100: "active"}

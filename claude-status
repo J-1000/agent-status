@@ -230,6 +230,28 @@ def classify_status(cpu, state):
     return "idle"
 
 
+def send_bell():
+    """Write terminal bell character to stdout."""
+    sys.stdout.write("\a")
+    sys.stdout.flush()
+
+
+def send_notification(session):
+    """Send a macOS desktop notification for a session."""
+    project = session.get("project", "unknown")
+    try:
+        subprocess.run(
+            [
+                "osascript", "-e",
+                f'display notification "Waiting for input" with title "claude-status" subtitle "{project}"',
+            ],
+            capture_output=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+
 def detect_transitions(previous_statuses, sessions):
     """Return set of PIDs that transitioned from active to idle."""
     transitioned = set()
