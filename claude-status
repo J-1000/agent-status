@@ -230,6 +230,16 @@ def classify_status(cpu, state):
     return "idle"
 
 
+def detect_transitions(previous_statuses, sessions):
+    """Return set of PIDs that transitioned from active to idle."""
+    transitioned = set()
+    for s in sessions:
+        pid = s["pid"]
+        if pid in previous_statuses and previous_statuses[pid] == "active" and s["status"] == "idle":
+            transitioned.add(pid)
+    return transitioned
+
+
 def disambiguate_projects(sessions):
     """If two sessions share a project basename, prepend parent dir."""
     name_counts = {}

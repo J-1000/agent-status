@@ -21,6 +21,46 @@ cs = importlib.util.module_from_spec(_spec)
 _loader.exec_module(cs)
 
 
+class TestDetectTransitions(unittest.TestCase):
+    def test_active_to_idle_detected(self):
+        prev = {100: "active"}
+        sessions = [{"pid": 100, "status": "idle"}]
+        self.assertEqual(cs.detect_transitions(prev, sessions), {100})
+
+    def test_idle_to_active_ignored(self):
+        prev = {100: "idle"}
+        sessions = [{"pid": 100, "status": "active"}]
+        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+
+    def test_active_to_stopped_ignored(self):
+        prev = {100: "active"}
+        sessions = [{"pid": 100, "status": "stopped"}]
+        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+
+    def test_new_session_ignored(self):
+        prev = {}
+        sessions = [{"pid": 100, "status": "idle"}]
+        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+
+    def test_disappeared_session_ignored(self):
+        prev = {100: "active"}
+        sessions = []
+        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+
+    def test_multiple_transitions(self):
+        prev = {100: "active", 200: "active", 300: "idle"}
+        sessions = [
+            {"pid": 100, "status": "idle"},
+            {"pid": 200, "status": "idle"},
+            {"pid": 300, "status": "active"},
+        ]
+        self.assertEqual(cs.detect_transitions(prev, sessions), {100, 200})
+
+    def test_empty_previous(self):
+        sessions = [{"pid": 100, "status": "idle"}]
+        self.assertEqual(cs.detect_transitions({}, sessions), set())
+
+
 class TestClassifyStatus(unittest.TestCase):
     def test_active_high_cpu(self):
         self.assertEqual(cs.classify_status(15.0, "R+"), "active")
