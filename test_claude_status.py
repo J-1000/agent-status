@@ -620,6 +620,18 @@ class TestFocusGhottySurface(unittest.TestCase):
         self.assertFalse(cs.focus_ghostty_surface("abc-123"))
 
 
+class TestParseArgs(unittest.TestCase):
+    @patch("sys.argv", ["claude-status", "--alert"])
+    def test_alert_flag_true(self):
+        args = cs.parse_args()
+        self.assertTrue(args.alert)
+
+    @patch("sys.argv", ["claude-status"])
+    def test_alert_flag_default_false(self):
+        args = cs.parse_args()
+        self.assertFalse(args.alert)
+
+
 class TestHandleGoto(unittest.TestCase):
     def _make_session(self, project, surface_id="surf-1234"):
         return {

@@ -25,6 +25,10 @@ def parse_args():
         "--json", action="store_true", dest="json_output", help="output as JSON"
     )
     parser.add_argument(
+        "--alert", action="store_true",
+        help="notify when a session goes from active to idle (use with --watch)",
+    )
+    parser.add_argument(
         "--goto", metavar="PROJECT",
         help="focus the Ghostty tab running a session matching PROJECT",
     )
