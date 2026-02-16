@@ -535,10 +535,23 @@ def main():
 
     if args.watch:
         cache = {}
+        previous_statuses = {}
         try:
             while True:
                 clear_screen()
-                print_snapshot(json_output=args.json_output, cache=cache)
+                sessions = collect_sessions(cache=cache)
+
+                transitioned_pids = set()
+                if args.alert and previous_statuses:
+                    transitioned_pids = detect_transitions(previous_statuses, sessions)
+                    alert_transitions(sessions, transitioned_pids)
+
+                previous_statuses = {s["pid"]: s["status"] for s in sessions}
+
+                if args.json_output:
+                    sys.stdout.write(format_json(sessions))
+                else:
+                    sys.stdout.write(format_table(sessions, transitioned_pids=transitioned_pids))
                 time.sleep(args.interval)
         except KeyboardInterrupt:
             pass
