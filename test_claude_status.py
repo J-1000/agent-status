@@ -94,6 +94,34 @@ class TestDetectTransitions(unittest.TestCase):
         self.assertEqual(cs.detect_transitions({}, sessions), set())
 
 
+class TestAlertTransitions(unittest.TestCase):
+    @patch.object(cs, "send_notification")
+    @patch.object(cs, "send_bell")
+    def test_no_transitions_no_calls(self, mock_bell, mock_notif):
+        cs.alert_transitions([], set())
+        mock_bell.assert_not_called()
+        mock_notif.assert_not_called()
+
+    @patch.object(cs, "send_notification")
+    @patch.object(cs, "send_bell")
+    def test_single_transition(self, mock_bell, mock_notif):
+        sessions = [{"pid": 100, "project": "api"}]
+        cs.alert_transitions(sessions, {100})
+        mock_bell.assert_called_once()
+        mock_notif.assert_called_once_with({"pid": 100, "project": "api"})
+
+    @patch.object(cs, "send_notification")
+    @patch.object(cs, "send_bell")
+    def test_multiple_transitions_one_bell(self, mock_bell, mock_notif):
+        sessions = [
+            {"pid": 100, "project": "api"},
+            {"pid": 200, "project": "web"},
+        ]
+        cs.alert_transitions(sessions, {100, 200})
+        mock_bell.assert_called_once()
+        self.assertEqual(mock_notif.call_count, 2)
+
+
 class TestClassifyStatus(unittest.TestCase):
     def test_active_high_cpu(self):
         self.assertEqual(cs.classify_status(15.0, "R+"), "active")

@@ -262,6 +262,17 @@ def detect_transitions(previous_statuses, sessions):
     return transitioned
 
 
+def alert_transitions(sessions, transitioned_pids):
+    """Send bell + desktop notifications for sessions that finished working."""
+    if not transitioned_pids:
+        return
+    send_bell()
+    pid_to_session = {s["pid"]: s for s in sessions}
+    for pid in transitioned_pids:
+        if pid in pid_to_session:
+            send_notification(pid_to_session[pid])
+
+
 def disambiguate_projects(sessions):
     """If two sessions share a project basename, prepend parent dir."""
     name_counts = {}
