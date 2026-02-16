@@ -37,14 +37,14 @@ A single CLI command (`claude-status`) that prints a snapshot of all running Cla
 ```
 $ claude-status
 
-  ● api-server        active    a1b2c3d4
-  ◐ frontend          idle      e5f6a7b8
-  ● ml-pipeline       active    c9d0e1f2
+  ● api-server        main        active    2h15m   a1b2c3d4
+  ◐ frontend          feature/ui  idle      45m     e5f6a7b8
+  ● ml-pipeline       main        active    1h02m   c9d0e1f2
 
   3 sessions (2 active, 1 idle)
 ```
 
-Columns: status icon, project name (derived from directory basename), status label, Ghostty surface ID (truncated). If two projects share the same basename, disambiguate by prepending the parent directory (e.g. `work/api-server`).
+Columns: status icon, project name (derived from directory basename), git branch, status label, uptime, Ghostty surface ID (truncated). If two projects share the same basename, disambiguate by prepending the parent directory (e.g. `work/api-server`).
 
 If the terminal supports color, use ANSI colors for the status icons. Fall back to plain text gracefully.
 
@@ -60,6 +60,7 @@ claude-status --watch              # re-print every 2 seconds (like `watch`)
 claude-status --watch --interval 5 # custom refresh interval
 claude-status --json               # output as JSON for scripting/piping
 claude-status --goto <project>     # focus the Ghostty tab for a session
+claude-status --watch --alert      # notify when a session goes active → idle
 ```
 
 ### Tab Switching (`--goto`)
@@ -70,6 +71,17 @@ claude-status --goto <project>     # focus the Ghostty tab for a session
 - **Multiple matches:** prints matching sessions and asks to be more specific (exit 1)
 - **Match has no surface ID:** prints an error explaining it's not in Ghostty (exit 1)
 - **Single match:** calls `open "ghostty://present-surface/<surface_id>"` to focus the tab (exit 0)
+
+### Watch Alerts (`--alert`)
+
+`claude-status --watch --alert` fires notifications when a session transitions from **active** to **idle** (Claude finished working, waiting for input). Behavior:
+
+- Tracks each session's status by PID between watch cycles
+- On active→idle transition: terminal bell (one per cycle) + macOS desktop notification (one per session) via `osascript`
+- First cycle never alerts (no previous state to compare)
+- Silently ignored without `--watch`
+- Transitioned rows show a `<- done` marker in the table output
+- Other transitions (idle→active, active→stopped, new/disappeared sessions) are ignored
 
 ## Technical Decisions
 
@@ -88,5 +100,5 @@ claude-status --goto <project>     # focus the Ghostty tab for a session
 ## Future Extensions
 
 - **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
-- **Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning Claude finished and is waiting for you)
+- ~~**Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning Claude finished and is waiting for you)~~ ✓ Shipped as `--alert`
 - **Task integration:** Read a `tasks.md` file and display alongside sessions
