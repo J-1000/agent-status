@@ -401,12 +401,16 @@ STATUS_DISPLAY = {
 RESET = "\033[0m"
 
 
-def format_table(sessions):
+YELLOW = "\033[33m"
+
+
+def format_table(sessions, transitioned_pids=None):
     """Format sessions as an aligned table with optional ANSI colors."""
     if not sessions:
         return "  No active Claude Code sessions found.\n"
 
     use_color = supports_color()
+    transitioned_pids = transitioned_pids or set()
     lines = []
 
     # Calculate column widths
@@ -429,6 +433,13 @@ def format_table(sessions):
             icon_str = icon
 
         line = f"  {icon_str} {s['project']:<{max_project}}  {branch:<{max_branch}}  {label:<{max_label}}  {uptime:<{max_uptime}}  {identifier}"
+
+        if s.get("pid") in transitioned_pids:
+            if use_color:
+                line += f"  {YELLOW}<- done{RESET}"
+            else:
+                line += "  <- done"
+
         lines.append(line)
 
     # Summary

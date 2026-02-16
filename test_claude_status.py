@@ -339,6 +339,39 @@ class TestFormatTable(unittest.TestCase):
         self.assertIn("\033[0m", result)  # reset
 
 
+    @patch.object(cs, "supports_color", return_value=False)
+    def test_transition_marker_shown(self, _mock):
+        sessions = [
+            {"pid": 100, "project": "proj", "status": "idle", "surface_id": None, "tty": "t1", "branch": "main", "uptime": "5m"},
+        ]
+        result = cs.format_table(sessions, transitioned_pids={100})
+        self.assertIn("<- done", result)
+
+    @patch.object(cs, "supports_color", return_value=False)
+    def test_no_marker_when_none(self, _mock):
+        sessions = [
+            {"pid": 100, "project": "proj", "status": "idle", "surface_id": None, "tty": "t1", "branch": "main", "uptime": "5m"},
+        ]
+        result = cs.format_table(sessions)
+        self.assertNotIn("<- done", result)
+
+    @patch.object(cs, "supports_color", return_value=False)
+    def test_no_marker_when_empty(self, _mock):
+        sessions = [
+            {"pid": 100, "project": "proj", "status": "idle", "surface_id": None, "tty": "t1", "branch": "main", "uptime": "5m"},
+        ]
+        result = cs.format_table(sessions, transitioned_pids=set())
+        self.assertNotIn("<- done", result)
+
+    @patch.object(cs, "supports_color", return_value=True)
+    def test_transition_marker_color(self, _mock):
+        sessions = [
+            {"pid": 100, "project": "proj", "status": "idle", "surface_id": None, "tty": "t1", "branch": "main", "uptime": "5m"},
+        ]
+        result = cs.format_table(sessions, transitioned_pids={100})
+        self.assertIn("\033[33m<- done\033[0m", result)
+
+
 class TestFormatJson(unittest.TestCase):
     def test_valid_json(self):
         sessions = [
