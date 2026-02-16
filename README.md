@@ -29,7 +29,12 @@ claude-status --watch              # re-print every 2 seconds
 claude-status --watch --interval 5 # re-print every 5 seconds
 claude-status --json               # output as JSON for scripting
 claude-status --goto api-server    # focus the Ghostty tab for a session
+claude-status --watch --alert      # get notified when a session finishes
 ```
+
+## Alerts
+
+Use `--alert` with `--watch` to get notified when a Claude session transitions from **active** to **idle** (i.e., Claude finished working and is waiting for input). Fires a terminal bell and a macOS desktop notification for each session.
 
 ## Focusing Sessions
 
