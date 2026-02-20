@@ -492,6 +492,15 @@ class TestGetProcessInfo(unittest.TestCase):
         self.assertEqual(len(info), 1)
         self.assertIn(123, info)
 
+    @patch("subprocess.run")
+    def test_defaults_tty_when_missing(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="  123  10.5 R+\n",
+        )
+        info = cs.get_process_info([123])
+        self.assertEqual(info[123]["tty"], "??")
+
 
 class TestGetParentMap(unittest.TestCase):
     @patch("subprocess.run")
@@ -606,6 +615,16 @@ class TestGetGhottySurfaceId(unittest.TestCase):
         ]
         sid = cs.get_ghostty_surface_id(123)
         self.assertEqual(sid, "deadbeef-1111")
+        self.assertEqual(mock_run.call_count, 2)
+
+    @patch("subprocess.run")
+    def test_nonzero_first_command_tries_fallback(self, mock_run):
+        mock_run.side_effect = [
+            MagicMock(returncode=1, stdout=""),
+            MagicMock(returncode=0, stdout="123 codex GHOSTTY_SURFACE_ID=feedface-0000\n"),
+        ]
+        sid = cs.get_ghostty_surface_id(999)
+        self.assertEqual(sid, "feedface-0000")
         self.assertEqual(mock_run.call_count, 2)
 
 
@@ -1027,6 +1046,47 @@ class TestMainWatchBehavior(unittest.TestCase):
         cs.main()
         mock_clear.assert_not_called()
         mock_format_json_v2.assert_called_once()
+
+    @patch.object(cs.sys, "stdout", new_callable=MagicMock)
+    @patch.object(cs.time, "sleep", side_effect=KeyboardInterrupt)
+    @patch.object(cs, "format_table", return_value="table\n")
+    @patch.object(cs, "collect_sessions", return_value=[{"pid": 101, "status": "active"}])
+    @patch.object(cs, "alert_transitions")
+    @patch.object(cs, "detect_transitions")
+    @patch.object(cs, "parse_args", return_value=Namespace(
+        watch=True, interval=1.0, interval_active=None, interval_idle=None,
+        json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None
+    ))
+    def test_watch_alert_first_cycle_does_not_alert(
+        self, _mock_args, mock_detect, mock_alert, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
+    ):
+        cs.main()
+        mock_detect.assert_not_called()
+        mock_alert.assert_not_called()
+
+    @patch.object(cs.sys, "stdout", new_callable=MagicMock)
+    @patch.object(cs.time, "sleep", side_effect=[None, KeyboardInterrupt])
+    @patch.object(cs, "format_table", return_value="table\n")
+    @patch.object(cs, "collect_sessions", side_effect=[
+        [{"pid": 101, "status": "active"}],
+        [{"pid": 101, "status": "idle"}],
+    ])
+    @patch.object(cs, "alert_transitions")
+    @patch.object(cs, "detect_transitions", return_value={101})
+    @patch.object(cs, "parse_args", return_value=Namespace(
+        watch=True, interval=1.0, interval_active=None, interval_idle=None,
+        json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None
+    ))
+    def test_watch_alert_second_cycle_checks_transitions(
+        self, _mock_args, mock_detect, mock_alert, mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
+    ):
+        cs.main()
+        self.assertEqual(mock_collect.call_count, 2)
+        mock_detect.assert_called_once_with(
+            {101: "active"},
+            [{"pid": 101, "status": "idle"}],
+        )
+        mock_alert.assert_called_once_with([{"pid": 101, "status": "idle"}], {101})
 
 
 if __name__ == "__main__":
