@@ -560,11 +560,31 @@ def focus_ghostty_surface(surface_id):
         return False
 
 
+def find_project_matches(sessions, project_query):
+    """Find project matches using exact, then prefix, then substring."""
+    query = project_query.strip().lower()
+    if not query:
+        return (None, [])
+
+    exact = [s for s in sessions if s["project"].lower() == query]
+    if exact:
+        return ("exact", exact)
+
+    prefix = [s for s in sessions if s["project"].lower().startswith(query)]
+    if prefix:
+        return ("prefix", prefix)
+
+    substring = [s for s in sessions if query in s["project"].lower()]
+    if substring:
+        return ("substring", substring)
+
+    return (None, [])
+
+
 def handle_goto(project_query, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Find a session by project name and focus its Ghostty surface."""
     sessions = collect_sessions(cpu_threshold=cpu_threshold)
-    query = project_query.lower()
-    matches = [s for s in sessions if query in s["project"].lower()]
+    match_mode, matches = find_project_matches(sessions, project_query)
 
     if not matches:
         sys.stderr.write(f"  No session matching '{project_query}'.\n")
@@ -575,7 +595,10 @@ def handle_goto(project_query, cpu_threshold=DEFAULT_CPU_THRESHOLD):
         return 1
 
     if len(matches) > 1:
-        sys.stderr.write(f"  Multiple sessions match '{project_query}':\n")
+        mode_display = match_mode if match_mode else "project"
+        sys.stderr.write(
+            f"  Multiple {mode_display} matches for '{project_query}':\n"
+        )
         for s in matches:
             sys.stderr.write(f"    - {s['project']}\n")
         sys.stderr.write("  Be more specific.\n")
