@@ -287,7 +287,7 @@ class TestGetGitBranch(unittest.TestCase):
 class TestFormatTable(unittest.TestCase):
     def test_empty_sessions(self):
         result = cs.format_table([])
-        self.assertIn("No active Claude Code sessions found", result)
+        self.assertIn("No active Claude/Codex sessions found", result)
 
     @patch.object(cs, "supports_color", return_value=False)
     def test_single_session_no_color(self, _mock):
@@ -427,10 +427,19 @@ class TestDiscoverClaudePids(unittest.TestCase):
     def test_finds_pids(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
-            stdout="  123 claude\n  456 claude\n  789 zsh\n",
+            stdout="  123 claude\n  456 codex\n  789 zsh\n",
         )
         pids = cs.discover_claude_pids()
         self.assertEqual(pids, [123, 456])
+
+    @patch("subprocess.run")
+    def test_ignores_non_target_processes(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="  111 codex-cli\n  222 claude-helper\n  333 codex\n",
+        )
+        pids = cs.discover_claude_pids()
+        self.assertEqual(pids, [333])
 
     @patch("subprocess.run")
     def test_no_processes(self, mock_run):
