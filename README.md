@@ -1,9 +1,9 @@
-# claude-status
+# agent-status
 
 Show running Claude Code and Codex sessions across Ghostty tabs.
 
 ```
-$ claude-status
+$ agent-status
 
   ● api-server        main        active    2h15m   a1b2c3d4
   ◐ frontend          feature/ui  idle      45m     e5f6a7b8
@@ -17,25 +17,25 @@ $ claude-status
 Copy the script somewhere on your PATH:
 
 ```sh
-cp claude-status ~/bin/
-chmod +x ~/bin/claude-status
+cp agent-status ~/bin/
+chmod +x ~/bin/agent-status
 ```
 
 ## Usage
 
 ```
-claude-status                      # print snapshot and exit
-claude-status --watch              # re-print every 2 seconds
-claude-status --watch --interval 5 # re-print every 5 seconds
-claude-status --watch --interval 0.5 # interval must be > 0
-claude-status --watch --interval-active 0.5 --interval-idle 5 # adaptive polling
-claude-status --json               # output as JSON for scripting
-claude-status --json-v2            # output versioned JSON envelope with metadata
-claude-status --watch --json       # stream JSON snapshots (no screen clear)
-claude-status --watch --json-v2    # stream versioned JSON envelopes
-claude-status --goto api-server    # focus the Ghostty tab for a session
-claude-status --watch --alert      # get notified when a session finishes
-claude-status --cpu-threshold 2.5  # tune active/idle classification
+agent-status                      # print snapshot and exit
+agent-status --watch              # re-print every 2 seconds
+agent-status --watch --interval 5 # re-print every 5 seconds
+agent-status --watch --interval 0.5 # interval must be > 0
+agent-status --watch --interval-active 0.5 --interval-idle 5 # adaptive polling
+agent-status --json               # output as JSON for scripting
+agent-status --json-v2            # output versioned JSON envelope with metadata
+agent-status --watch --json       # stream JSON snapshots (no screen clear)
+agent-status --watch --json-v2    # stream versioned JSON envelopes
+agent-status --goto api-server    # focus the Ghostty tab for a session
+agent-status --watch --alert      # get notified when a session finishes
+agent-status --cpu-threshold 2.5  # tune active/idle classification
 ```
 
 ## Alerts
@@ -47,7 +47,7 @@ Use `--alert` with `--watch` to get notified when a Claude/Codex session transit
 Use `--goto` to switch to a running session's Ghostty tab:
 
 ```
-claude-status --goto frontend
+agent-status --goto frontend
 ```
 
 The argument is a case-insensitive project match. Matching priority is: exact project name, then prefix match, then substring match. If there are multiple matches at the selected tier you'll be asked to be more specific. This uses Ghostty's `ghostty://present-surface/` URL scheme, so it only works for sessions running inside Ghostty.
@@ -81,7 +81,8 @@ When using `--watch`, you can tune polling frequency by activity:
    - **active** if CPU is `>= threshold` (default `5%`)
    - **idle** otherwise (`< threshold`)
 
-You can set the threshold with `--cpu-threshold` or `CLAUDE_STATUS_CPU_THRESHOLD`.
+You can set the threshold with `--cpu-threshold` or `AGENT_STATUS_CPU_THRESHOLD`.
+`CLAUDE_STATUS_CPU_THRESHOLD` is still accepted for backward compatibility.
 
 ## Requirements
 
