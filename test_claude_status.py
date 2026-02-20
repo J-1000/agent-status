@@ -424,6 +424,14 @@ class TestFormatJson(unittest.TestCase):
         result = cs.format_json([])
         self.assertEqual(json.loads(result), [])
 
+    def test_json_v2_envelope(self):
+        sessions = [{"pid": 123, "project": "test"}]
+        result = cs.format_json_v2(sessions, generated_at="2026-02-20T12:00:00Z")
+        parsed = json.loads(result)
+        self.assertEqual(parsed["schema_version"], 1)
+        self.assertEqual(parsed["generated_at"], "2026-02-20T12:00:00Z")
+        self.assertEqual(parsed["sessions"], sessions)
+
 
 class TestDiscoverClaudePids(unittest.TestCase):
     @patch("subprocess.run")
@@ -725,6 +733,57 @@ class TestParseArgs(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 cs.parse_args()
 
+    @patch("sys.argv", ["claude-status", "--json-v2"])
+    def test_json_v2_flag(self):
+        args = cs.parse_args()
+        self.assertTrue(args.json_v2)
+
+    @patch("sys.argv", ["claude-status", "--interval-active", "0.5", "--interval-idle", "5"])
+    def test_adaptive_interval_flags(self):
+        args = cs.parse_args()
+        self.assertEqual(args.interval_active, 0.5)
+        self.assertEqual(args.interval_idle, 5.0)
+
+    @patch("sys.argv", ["claude-status", "--interval-active", "0"])
+    def test_interval_active_zero_rejected(self):
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cs.parse_args()
+
+    @patch("sys.argv", ["claude-status", "--interval-idle", "-1"])
+    def test_interval_idle_negative_rejected(self):
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cs.parse_args()
+
+
+class TestResolveWatchInterval(unittest.TestCase):
+    def _args(self, interval=2.0, interval_active=None, interval_idle=None):
+        return Namespace(
+            interval=interval,
+            interval_active=interval_active,
+            interval_idle=interval_idle,
+        )
+
+    def test_defaults_to_base_interval(self):
+        args = self._args(interval=2.0)
+        sessions = [{"status": "idle"}]
+        self.assertEqual(cs.resolve_watch_interval(args, sessions), 2.0)
+
+    def test_uses_active_interval_when_active_present(self):
+        args = self._args(interval=2.0, interval_active=0.5)
+        sessions = [{"status": "active"}, {"status": "idle"}]
+        self.assertEqual(cs.resolve_watch_interval(args, sessions), 0.5)
+
+    def test_uses_idle_interval_when_no_active(self):
+        args = self._args(interval=2.0, interval_idle=5.0)
+        sessions = [{"status": "idle"}, {"status": "stopped"}]
+        self.assertEqual(cs.resolve_watch_interval(args, sessions), 5.0)
+
+    def test_empty_sessions_use_idle_interval_if_set(self):
+        args = self._args(interval=2.0, interval_idle=6.0)
+        self.assertEqual(cs.resolve_watch_interval(args, []), 6.0)
+
 
 class TestResolveCpuThreshold(unittest.TestCase):
     @patch.dict(os.environ, {}, clear=True)
@@ -859,7 +918,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "collect_sessions", return_value=[])
     @patch.object(cs, "clear_screen")
     @patch.object(cs, "parse_args", return_value=Namespace(
-        watch=True, interval=1.0, json_output=True, alert=False, goto=None, cpu_threshold=None
+        watch=True, interval=1.0, interval_active=None, interval_idle=None,
+        json_output=True, json_v2=False, alert=False, goto=None, cpu_threshold=None
     ))
     def test_watch_json_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep, _mock_stdout
@@ -873,13 +933,30 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "collect_sessions", return_value=[])
     @patch.object(cs, "clear_screen")
     @patch.object(cs, "parse_args", return_value=Namespace(
-        watch=True, interval=1.0, json_output=False, alert=False, goto=None, cpu_threshold=None
+        watch=True, interval=1.0, interval_active=None, interval_idle=None,
+        json_output=False, json_v2=False, alert=False, goto=None, cpu_threshold=None
     ))
     def test_watch_table_clears_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
     ):
         cs.main()
         mock_clear.assert_called_once()
+
+    @patch.object(cs.sys, "stdout", new_callable=MagicMock)
+    @patch.object(cs.time, "sleep", side_effect=KeyboardInterrupt)
+    @patch.object(cs, "format_json_v2", return_value="{}\n")
+    @patch.object(cs, "collect_sessions", return_value=[])
+    @patch.object(cs, "clear_screen")
+    @patch.object(cs, "parse_args", return_value=Namespace(
+        watch=True, interval=1.0, interval_active=None, interval_idle=None,
+        json_output=False, json_v2=True, alert=False, goto=None, cpu_threshold=None
+    ))
+    def test_watch_json_v2_does_not_clear_screen(
+        self, _mock_args, mock_clear, _mock_collect, mock_format_json_v2, _mock_sleep, _mock_stdout
+    ):
+        cs.main()
+        mock_clear.assert_not_called()
+        mock_format_json_v2.assert_called_once()
 
 
 if __name__ == "__main__":
