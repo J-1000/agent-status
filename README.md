@@ -1,6 +1,6 @@
 # claude-status
 
-Show running Claude Code sessions across Ghostty tabs.
+Show running Claude Code and Codex sessions across Ghostty tabs.
 
 ```
 $ claude-status
@@ -36,7 +36,7 @@ claude-status --watch --alert      # get notified when a session finishes
 
 ## Alerts
 
-Use `--alert` with `--watch` to get notified when a Claude session transitions from **active** to **idle** (i.e., Claude finished working and is waiting for input). Fires a terminal bell and a macOS desktop notification for each session.
+Use `--alert` with `--watch` to get notified when a Claude/Codex session transitions from **active** to **idle** (i.e., the agent finished working and is waiting for input). Fires a terminal bell and a macOS desktop notification for each session.
 
 ## Focusing Sessions
 
@@ -50,7 +50,7 @@ The argument is a case-insensitive substring match on the project name. If there
 
 ## How it works
 
-1. Discovers running `claude` processes via `ps`
+1. Discovers running `claude` and `codex` processes via `ps`
 2. Resolves each process's working directory via `lsof` to determine the project
 3. Detects the git branch for each project via `git rev-parse`
 4. Extracts `GHOSTTY_SURFACE_ID` from the process environment to identify which tab/split each session lives in
