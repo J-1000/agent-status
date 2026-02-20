@@ -34,7 +34,7 @@ Last updated: 2026-02-20
 ## Verification baseline
 
 - Unit tests: `python3 -m unittest -q`
-- Latest observed result: `130 tests`, `OK`
+- Latest observed result: `134 tests`, `OK`
 
 ## PRD open-question validation
 
@@ -44,3 +44,10 @@ Last updated: 2026-02-20
   - `ps -wwwE` visibility, with `ps -eww -o command=` fallback
   - parent/child PID chains for nested-session de-duplication
   - `%cpu` behavior while idle vs actively generating
+
+## Test coverage expansion
+
+- Added edge-case coverage for:
+  - partial/malformed `ps` process-info rows
+  - `GHOSTTY_SURFACE_ID` fallback extraction behavior
+  - watch-loop transition behavior across first/second cycles
