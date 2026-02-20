@@ -47,7 +47,7 @@ Use `--goto` to switch to a running session's Ghostty tab:
 claude-status --goto frontend
 ```
 
-The argument is a case-insensitive substring match on the project name. If there are multiple matches you'll be asked to be more specific. This uses Ghostty's `ghostty://present-surface/` URL scheme, so it only works for sessions running inside Ghostty.
+The argument is a case-insensitive project match. Matching priority is: exact project name, then prefix match, then substring match. If there are multiple matches at the selected tier you'll be asked to be more specific. This uses Ghostty's `ghostty://present-surface/` URL scheme, so it only works for sessions running inside Ghostty.
 
 ## How it works
 
