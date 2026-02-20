@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for claude-status."""
+"""Tests for agent-status."""
 
 import json
 import io
@@ -10,15 +10,15 @@ import unittest
 from argparse import Namespace
 from unittest.mock import patch, MagicMock
 
-# Import claude-status despite the hyphen and no .py extension
+# Import agent-status despite the hyphen and no .py extension
 import importlib.machinery
 import importlib.util
 
 _loader = importlib.machinery.SourceFileLoader(
-    "claude_status",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "claude-status"),
+    "agent_status",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent-status"),
 )
-_spec = importlib.util.spec_from_loader("claude_status", _loader)
+_spec = importlib.util.spec_from_loader("agent_status", _loader)
 cs = importlib.util.module_from_spec(_spec)
 _loader.exec_module(cs)
 
@@ -700,57 +700,57 @@ class TestFocusGhottySurface(unittest.TestCase):
 
 
 class TestParseArgs(unittest.TestCase):
-    @patch("sys.argv", ["claude-status", "--alert"])
+    @patch("sys.argv", ["agent-status", "--alert"])
     def test_alert_flag_true(self):
         args = cs.parse_args()
         self.assertTrue(args.alert)
 
-    @patch("sys.argv", ["claude-status"])
+    @patch("sys.argv", ["agent-status"])
     def test_alert_flag_default_false(self):
         args = cs.parse_args()
         self.assertFalse(args.alert)
 
-    @patch("sys.argv", ["claude-status", "--interval", "0"])
+    @patch("sys.argv", ["agent-status", "--interval", "0"])
     def test_interval_zero_rejected(self):
         with patch("sys.stderr", new=io.StringIO()):
             with self.assertRaises(SystemExit):
                 cs.parse_args()
 
-    @patch("sys.argv", ["claude-status", "--interval", "-1"])
+    @patch("sys.argv", ["agent-status", "--interval", "-1"])
     def test_interval_negative_rejected(self):
         with patch("sys.stderr", new=io.StringIO()):
             with self.assertRaises(SystemExit):
                 cs.parse_args()
 
-    @patch("sys.argv", ["claude-status", "--cpu-threshold", "2.5"])
+    @patch("sys.argv", ["agent-status", "--cpu-threshold", "2.5"])
     def test_cpu_threshold_flag(self):
         args = cs.parse_args()
         self.assertEqual(args.cpu_threshold, 2.5)
 
-    @patch("sys.argv", ["claude-status", "--cpu-threshold", "-0.1"])
+    @patch("sys.argv", ["agent-status", "--cpu-threshold", "-0.1"])
     def test_cpu_threshold_negative_rejected(self):
         with patch("sys.stderr", new=io.StringIO()):
             with self.assertRaises(SystemExit):
                 cs.parse_args()
 
-    @patch("sys.argv", ["claude-status", "--json-v2"])
+    @patch("sys.argv", ["agent-status", "--json-v2"])
     def test_json_v2_flag(self):
         args = cs.parse_args()
         self.assertTrue(args.json_v2)
 
-    @patch("sys.argv", ["claude-status", "--interval-active", "0.5", "--interval-idle", "5"])
+    @patch("sys.argv", ["agent-status", "--interval-active", "0.5", "--interval-idle", "5"])
     def test_adaptive_interval_flags(self):
         args = cs.parse_args()
         self.assertEqual(args.interval_active, 0.5)
         self.assertEqual(args.interval_idle, 5.0)
 
-    @patch("sys.argv", ["claude-status", "--interval-active", "0"])
+    @patch("sys.argv", ["agent-status", "--interval-active", "0"])
     def test_interval_active_zero_rejected(self):
         with patch("sys.stderr", new=io.StringIO()):
             with self.assertRaises(SystemExit):
                 cs.parse_args()
 
-    @patch("sys.argv", ["claude-status", "--interval-idle", "-1"])
+    @patch("sys.argv", ["agent-status", "--interval-idle", "-1"])
     def test_interval_idle_negative_rejected(self):
         with patch("sys.stderr", new=io.StringIO()):
             with self.assertRaises(SystemExit):
@@ -795,6 +795,11 @@ class TestResolveCpuThreshold(unittest.TestCase):
     def test_uses_env_when_arg_missing(self):
         args = Namespace(cpu_threshold=None)
         self.assertEqual(cs.resolve_cpu_threshold(args), 2.25)
+
+    @patch.dict(os.environ, {cs.LEGACY_CPU_THRESHOLD_ENV_VAR: "1.75"}, clear=True)
+    def test_uses_legacy_env_when_new_var_missing(self):
+        args = Namespace(cpu_threshold=None)
+        self.assertEqual(cs.resolve_cpu_threshold(args), 1.75)
 
     @patch.dict(os.environ, {cs.CPU_THRESHOLD_ENV_VAR: "oops"}, clear=True)
     @patch.object(cs.sys, "stderr", new_callable=io.StringIO)
