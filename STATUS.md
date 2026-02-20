@@ -9,8 +9,9 @@ Last updated: 2026-02-20
 - Resolves CWD via `lsof`, git branch via `git rev-parse`, and uptime via `ps etime`.
 - Classifies status:
   - `stopped` when process state contains `T`
-  - `active` when CPU is `>= 5.0`
+  - `active` when CPU is `>= threshold` (default `5.0`)
   - `idle` otherwise
+- CPU threshold is configurable via `--cpu-threshold` or `CLAUDE_STATUS_CPU_THRESHOLD`.
 - `--watch --json` emits JSON snapshots without screen-clear escape codes.
 - `--alert` in watch mode notifies on `active -> idle` transitions.
 - `--goto` focuses matching Ghostty surface when available.
