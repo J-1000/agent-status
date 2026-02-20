@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""claude-status — show running Claude/Codex sessions across Ghostty tabs."""
+"""agent-status — show running Claude/Codex sessions across Ghostty tabs."""
 
 import argparse
 import concurrent.futures
@@ -13,7 +13,8 @@ import time
 
 SESSION_COMMANDS = {"claude", "codex"}
 DEFAULT_CPU_THRESHOLD = 5.0
-CPU_THRESHOLD_ENV_VAR = "CLAUDE_STATUS_CPU_THRESHOLD"
+CPU_THRESHOLD_ENV_VAR = "AGENT_STATUS_CPU_THRESHOLD"
+LEGACY_CPU_THRESHOLD_ENV_VAR = "CLAUDE_STATUS_CPU_THRESHOLD"
 JSON_V2_SCHEMA_VERSION = 1
 
 
@@ -74,7 +75,7 @@ def parse_args():
         default=None,
         help=(
             "CPU percentage threshold for active sessions "
-            "(default: 5.0, or CLAUDE_STATUS_CPU_THRESHOLD)"
+            "(default: 5.0, or AGENT_STATUS_CPU_THRESHOLD)"
         ),
     )
     return parser.parse_args()
@@ -288,6 +289,10 @@ def resolve_cpu_threshold(args):
         return args.cpu_threshold
 
     env_value = os.environ.get(CPU_THRESHOLD_ENV_VAR)
+    env_name = CPU_THRESHOLD_ENV_VAR
+    if env_value is None:
+        env_value = os.environ.get(LEGACY_CPU_THRESHOLD_ENV_VAR)
+        env_name = LEGACY_CPU_THRESHOLD_ENV_VAR
     if env_value is None:
         return DEFAULT_CPU_THRESHOLD
 
@@ -295,14 +300,14 @@ def resolve_cpu_threshold(args):
         threshold = float(env_value)
     except ValueError:
         sys.stderr.write(
-            f"  Ignoring invalid {CPU_THRESHOLD_ENV_VAR} value '{env_value}'; "
+            f"  Ignoring invalid {env_name} value '{env_value}'; "
             f"using default {DEFAULT_CPU_THRESHOLD}.\n"
         )
         return DEFAULT_CPU_THRESHOLD
 
     if threshold < 0:
         sys.stderr.write(
-            f"  Ignoring invalid {CPU_THRESHOLD_ENV_VAR} value '{env_value}'; "
+            f"  Ignoring invalid {env_name} value '{env_value}'; "
             f"using default {DEFAULT_CPU_THRESHOLD}.\n"
         )
         return DEFAULT_CPU_THRESHOLD
@@ -321,7 +326,7 @@ def send_notification(session):
     project = session.get("project", "unknown")
     script = (
         'on run argv\n'
-        'display notification "Waiting for input" with title "claude-status" subtitle (item 1 of argv)\n'
+        'display notification "Waiting for input" with title "agent-status" subtitle (item 1 of argv)\n'
         "end run"
     )
     try:
