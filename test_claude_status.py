@@ -788,6 +788,18 @@ class TestHandleGoto(unittest.TestCase):
         self.assertEqual(result, 0)
         mock_focus.assert_called_once_with("surf-1234")
 
+    @patch.object(cs, "focus_ghostty_surface", return_value=True)
+    @patch.object(cs, "collect_sessions")
+    def test_exact_match_beats_other_prefix_matches(self, mock_collect, mock_focus):
+        mock_collect.return_value = [
+            self._make_session("api"),
+            self._make_session("api-server"),
+            self._make_session("api-worker"),
+        ]
+        result = cs.handle_goto("api")
+        self.assertEqual(result, 0)
+        mock_focus.assert_called_once_with("surf-1234")
+
     @patch.object(cs, "collect_sessions")
     def test_no_match(self, mock_collect):
         mock_collect.return_value = [self._make_session("api-server")]
@@ -808,6 +820,36 @@ class TestHandleGoto(unittest.TestCase):
         mock_collect.return_value = [self._make_session("api-server", surface_id=None)]
         result = cs.handle_goto("api-server")
         self.assertEqual(result, 1)
+
+
+class TestFindProjectMatches(unittest.TestCase):
+    def setUp(self):
+        self.sessions = [
+            {"project": "api"},
+            {"project": "api-server"},
+            {"project": "worker-api"},
+            {"project": "frontend"},
+        ]
+
+    def test_prefers_exact_matches(self):
+        mode, matches = cs.find_project_matches(self.sessions, "api")
+        self.assertEqual(mode, "exact")
+        self.assertEqual([s["project"] for s in matches], ["api"])
+
+    def test_uses_prefix_when_no_exact(self):
+        mode, matches = cs.find_project_matches(self.sessions, "front")
+        self.assertEqual(mode, "prefix")
+        self.assertEqual([s["project"] for s in matches], ["frontend"])
+
+    def test_uses_substring_when_no_prefix(self):
+        mode, matches = cs.find_project_matches(self.sessions, "ker-a")
+        self.assertEqual(mode, "substring")
+        self.assertEqual([s["project"] for s in matches], ["worker-api"])
+
+    def test_returns_none_for_empty_query(self):
+        mode, matches = cs.find_project_matches(self.sessions, "   ")
+        self.assertIsNone(mode)
+        self.assertEqual(matches, [])
 
 
 class TestMainWatchBehavior(unittest.TestCase):
