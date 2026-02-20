@@ -101,5 +101,5 @@ claude-status --watch --alert      # notify when a session goes active → idle
 ## Future Extensions
 
 - **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
-- ~~**Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning Claude finished and is waiting for you)~~ ✓ Shipped as `--alert`
+- ~~**Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning the agent finished and is waiting for you)~~ ✓ Shipped as `--alert`
 - **Task integration:** Read a `tasks.md` file and display alongside sessions
