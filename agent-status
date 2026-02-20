@@ -6,6 +6,7 @@ import concurrent.futures
 from datetime import datetime, timezone
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -16,6 +17,7 @@ DEFAULT_CPU_THRESHOLD = 5.0
 CPU_THRESHOLD_ENV_VAR = "AGENT_STATUS_CPU_THRESHOLD"
 LEGACY_CPU_THRESHOLD_ENV_VAR = "CLAUDE_STATUS_CPU_THRESHOLD"
 JSON_V2_SCHEMA_VERSION = 1
+GHOSTTY_SURFACE_RE = re.compile(r"(?:^|\s)GHOSTTY_SURFACE_ID=([^\s]+)")
 
 
 def positive_float(value):
@@ -233,16 +235,22 @@ def get_cwds(pids):
 
 def get_ghostty_surface_id(pid):
     """Try to extract GHOSTTY_SURFACE_ID from process environment."""
+    commands = [
+        ["ps", "-p", str(pid), "-wwwE"],
+        ["ps", "-p", str(pid), "-eww", "-o", "command="],
+    ]
     try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-wwwE"],
-            capture_output=True,
-            text=True,
-        )
-        output = result.stdout
-        for token in output.split():
-            if token.startswith("GHOSTTY_SURFACE_ID="):
-                return token.split("=", 1)[1]
+        for command in commands:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                continue
+            match = GHOSTTY_SURFACE_RE.search(result.stdout)
+            if match:
+                return match.group(1)
     except FileNotFoundError:
         pass
     return None

@@ -598,6 +598,16 @@ class TestGetGhottySurfaceId(unittest.TestCase):
         sid = cs.get_ghostty_surface_id(123)
         self.assertIsNone(sid)
 
+    @patch("subprocess.run")
+    def test_falls_back_to_eww_command(self, mock_run):
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="123 claude TERM=xterm\n"),
+            MagicMock(returncode=0, stdout="123 claude GHOSTTY_SURFACE_ID=deadbeef-1111\n"),
+        ]
+        sid = cs.get_ghostty_surface_id(123)
+        self.assertEqual(sid, "deadbeef-1111")
+        self.assertEqual(mock_run.call_count, 2)
+
 
 class TestSupportsColor(unittest.TestCase):
     @patch.dict(os.environ, {"NO_COLOR": "1"})
