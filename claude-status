@@ -11,6 +11,8 @@ import time
 
 
 SESSION_COMMANDS = {"claude", "codex"}
+DEFAULT_CPU_THRESHOLD = 5.0
+CPU_THRESHOLD_ENV_VAR = "CLAUDE_STATUS_CPU_THRESHOLD"
 
 
 def positive_float(value):
@@ -18,6 +20,14 @@ def positive_float(value):
     parsed = float(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
+def non_negative_float(value):
+    """argparse type that accepts only values >= 0."""
+    parsed = float(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be >= 0")
     return parsed
 
 
@@ -42,6 +52,16 @@ def parse_args():
     parser.add_argument(
         "--goto", metavar="PROJECT",
         help="focus the Ghostty tab running a session matching PROJECT",
+    )
+    parser.add_argument(
+        "--cpu-threshold",
+        type=non_negative_float,
+        metavar="PERCENT",
+        default=None,
+        help=(
+            "CPU percentage threshold for active sessions "
+            "(default: 5.0, or CLAUDE_STATUS_CPU_THRESHOLD)"
+        ),
     )
     return parser.parse_args()
 
@@ -239,16 +259,41 @@ def get_git_branch(cwd):
     return None
 
 
-CPU_THRESHOLD = 5.0  # percent above which a session is "active"
-
-
-def classify_status(cpu, state):
+def classify_status(cpu, state, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Classify session status based on CPU usage and process state."""
     if "T" in state:
         return "stopped"
-    if cpu >= CPU_THRESHOLD:
+    if cpu >= cpu_threshold:
         return "active"
     return "idle"
+
+
+def resolve_cpu_threshold(args):
+    """Resolve CPU threshold from CLI arg, env var, or default."""
+    if args.cpu_threshold is not None:
+        return args.cpu_threshold
+
+    env_value = os.environ.get(CPU_THRESHOLD_ENV_VAR)
+    if env_value is None:
+        return DEFAULT_CPU_THRESHOLD
+
+    try:
+        threshold = float(env_value)
+    except ValueError:
+        sys.stderr.write(
+            f"  Ignoring invalid {CPU_THRESHOLD_ENV_VAR} value '{env_value}'; "
+            f"using default {DEFAULT_CPU_THRESHOLD}.\n"
+        )
+        return DEFAULT_CPU_THRESHOLD
+
+    if threshold < 0:
+        sys.stderr.write(
+            f"  Ignoring invalid {CPU_THRESHOLD_ENV_VAR} value '{env_value}'; "
+            f"using default {DEFAULT_CPU_THRESHOLD}.\n"
+        )
+        return DEFAULT_CPU_THRESHOLD
+
+    return threshold
 
 
 def send_bell():
@@ -313,7 +358,7 @@ def disambiguate_projects(sessions):
             s["project"] = f"{parent}/{s['project']}"
 
 
-def collect_sessions(cache=None):
+def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Collect all Claude/Codex session data.
 
     If cache (dict) is provided, CWD and surface_id are cached across calls
@@ -381,7 +426,7 @@ def collect_sessions(cache=None):
         cwd = cwd_results.get(pid)
         project = os.path.basename(cwd) if cwd else "unknown"
         surface_id = sid_results.get(pid)
-        status = classify_status(info["cpu"], info["state"])
+        status = classify_status(info["cpu"], info["state"], cpu_threshold=cpu_threshold)
         uptime_seconds, uptime = uptime_futures[pid].result()
         branch = branch_results.get(cwd)
 
@@ -488,9 +533,9 @@ def format_json(sessions):
     return json.dumps(sessions, indent=2) + "\n"
 
 
-def print_snapshot(json_output=False, cache=None):
+def print_snapshot(json_output=False, cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Collect and print one snapshot."""
-    sessions = collect_sessions(cache=cache)
+    sessions = collect_sessions(cache=cache, cpu_threshold=cpu_threshold)
     if json_output:
         sys.stdout.write(format_json(sessions))
     else:
@@ -515,9 +560,9 @@ def focus_ghostty_surface(surface_id):
         return False
 
 
-def handle_goto(project_query):
+def handle_goto(project_query, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Find a session by project name and focus its Ghostty surface."""
-    sessions = collect_sessions()
+    sessions = collect_sessions(cpu_threshold=cpu_threshold)
     query = project_query.lower()
     matches = [s for s in sessions if query in s["project"].lower()]
 
@@ -552,9 +597,10 @@ def handle_goto(project_query):
 
 def main():
     args = parse_args()
+    cpu_threshold = resolve_cpu_threshold(args)
 
     if args.goto:
-        sys.exit(handle_goto(args.goto))
+        sys.exit(handle_goto(args.goto, cpu_threshold=cpu_threshold))
 
     if args.watch:
         cache = {}
@@ -563,7 +609,7 @@ def main():
             while True:
                 if not args.json_output:
                     clear_screen()
-                sessions = collect_sessions(cache=cache)
+                sessions = collect_sessions(cache=cache, cpu_threshold=cpu_threshold)
 
                 transitioned_pids = set()
                 if args.alert and previous_statuses:
@@ -580,7 +626,7 @@ def main():
         except KeyboardInterrupt:
             pass
     else:
-        print_snapshot(json_output=args.json_output)
+        print_snapshot(json_output=args.json_output, cpu_threshold=cpu_threshold)
 
 
 if __name__ == "__main__":
