@@ -100,6 +100,12 @@ claude-status --watch --alert      # notify when a session goes active → idle
 
 ## Future Extensions
 
+- **Configurable activity threshold:** Add `--cpu-threshold` (and optional env fallback) so active/idle classification is tunable per machine/workload.
+- **Stable machine-readable JSON envelope:** Add version/timestamp metadata (possibly via `--json-v2`) to make integrations safer over time.
+- **Smarter `--goto` matching:** Prioritize exact match, then prefix, then substring to reduce ambiguity without losing convenience.
+- **Adaptive watch polling:** Optional backoff or split intervals for active vs idle to reduce process-inspection overhead.
+- **Configurable alert events:** Allow notifying on additional transitions (`active->idle`, `active->stopped`, etc.) with cooldown controls.
+- **Additional edge-case tests:** Expand coverage around malformed env output, partial process-info rows, and transition behavior under watch mode.
 - **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
 - ~~**Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning the agent finished and is waiting for you)~~ ✓ Shipped as `--alert`
 - **Task integration:** Read a `tasks.md` file and display alongside sessions
