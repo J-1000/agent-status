@@ -4,7 +4,7 @@ Last updated: 2026-02-20
 
 ## Current behavior
 
-- Discovers `claude` processes via `ps`.
+- Discovers `claude` and `codex` processes via `ps`.
 - Filters to TTY-attached sessions (`tty` not `??`/empty).
 - Resolves CWD via `lsof`, git branch via `git rev-parse`, and uptime via `ps etime`.
 - Classifies status:
