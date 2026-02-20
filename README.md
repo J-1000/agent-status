@@ -32,6 +32,7 @@ claude-status --json               # output as JSON for scripting
 claude-status --watch --json       # stream JSON snapshots (no screen clear)
 claude-status --goto api-server    # focus the Ghostty tab for a session
 claude-status --watch --alert      # get notified when a session finishes
+claude-status --cpu-threshold 2.5  # tune active/idle classification
 ```
 
 ## Alerts
@@ -57,8 +58,10 @@ The argument is a case-insensitive substring match on the project name. If there
 5. Reads process uptime via `ps etime`
 6. Classifies status based on CPU usage and process state:
    - **stopped** if process state includes `T`
-   - **active** if CPU is `>= 5%`
-   - **idle** otherwise (`< 5%`)
+   - **active** if CPU is `>= threshold` (default `5%`)
+   - **idle** otherwise (`< threshold`)
+
+You can set the threshold with `--cpu-threshold` or `CLAUDE_STATUS_CPU_THRESHOLD`.
 
 ## Requirements
 
