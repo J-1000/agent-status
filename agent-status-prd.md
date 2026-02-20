@@ -90,7 +90,7 @@ agent-status --watch --alert      # notify when a session goes active → idle
 
 - **Language:** Bash or Python. Bash is fine since the macOS introspection commands (`ps`, `lsof`) have straightforward output. Python if parsing gets messy. Pick whichever you'll iterate on faster.
 - **No dependencies:** Avoid external packages. Use only standard library / coreutils.
-- **Single file:** The entire tool should be one script, installable by copying it to `~/bin/`.
+- **Single-file core tool:** The runtime CLI remains a single script (`agent-status`), with optional helper scripts for validation.
 - **macOS only:** Uses `ps` and `lsof` for process introspection. No Linux support needed for v1.
 
 ## Open Questions to Resolve During Implementation
@@ -113,7 +113,7 @@ Resolved in code and validation workflow:
 - ~~**Smarter `--goto` matching:** Prioritize exact match, then prefix, then substring to reduce ambiguity without losing convenience.~~ ✓ Shipped with case-insensitive tiered match precedence
 - ~~**Adaptive watch polling:** Optional backoff or split intervals for active vs idle to reduce process-inspection overhead.~~ ✓ Shipped as `--interval-active` / `--interval-idle`
 - **Configurable alert events:** Allow notifying on additional transitions (`active->idle`, `active->stopped`, etc.) with cooldown controls.
-- **Additional edge-case tests:** Expand coverage around malformed env output, partial process-info rows, and transition behavior under watch mode.
+- ~~**Additional edge-case tests:** Expand coverage around malformed env output, partial process-info rows, and transition behavior under watch mode.~~ ✓ Shipped with targeted unit tests
 - **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
 - ~~**Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning the agent finished and is waiting for you)~~ ✓ Shipped as `--alert`
 - **Task integration:** Read a `tasks.md` file and display alongside sessions
