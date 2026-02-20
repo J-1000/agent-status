@@ -66,7 +66,7 @@ claude-status --watch --alert      # notify when a session goes active → idle
 
 ### Tab Switching (`--goto`)
 
-`claude-status --goto <project>` focuses the Ghostty surface running the matching session. The argument is a case-insensitive substring match on the project name. Behavior:
+`claude-status --goto <project>` focuses the Ghostty surface running the matching session. Matching is case-insensitive with this priority: exact name, then prefix, then substring. Behavior:
 
 - **0 matches:** prints an error and lists available sessions (exit 1)
 - **Multiple matches:** prints matching sessions and asks to be more specific (exit 1)
