@@ -74,9 +74,10 @@ When using `--watch`, you can tune polling frequency by activity:
 1. Discovers running `claude` and `codex` processes via `ps`
 2. Resolves each process's working directory via `lsof` to determine the project
 3. Detects the git branch for each project via `git rev-parse`
-4. Extracts `GHOSTTY_SURFACE_ID` from the process environment to identify which tab/split each session lives in
-5. Reads process uptime via `ps etime`
-6. Classifies status based on CPU usage and process state:
+4. Deduplicates nested Claude/Codex parent-child process chains to avoid double-counting a single session
+5. Extracts `GHOSTTY_SURFACE_ID` from the process environment to identify which tab/split each session lives in (`ps -wwwE` with `ps -eww -o command=` fallback)
+6. Reads process uptime via `ps etime`
+7. Classifies status based on CPU usage and process state:
    - **stopped** if process state includes `T`
    - **active** if CPU is `>= threshold` (default `5%`)
    - **idle** otherwise (`< threshold`)
