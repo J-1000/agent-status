@@ -95,10 +95,16 @@ agent-status --watch --alert      # notify when a session goes active → idle
 
 ## Open Questions to Resolve During Implementation
 
-1. **What exactly does `GHOSTTY_SURFACE_ID` contain?** Test by running `env | grep GHOSTTY` in different tabs and splits. Determine whether the value encodes tab index, split position, or is just an opaque UUID.
-2. **Does `ps -wwwE` reliably show the full environment?** Verify that `GHOSTTY_SURFACE_ID` appears in the output for Claude/Codex processes. If not, investigate alternatives like `KERN_PROCARGS2` sysctl.
-3. **How do Claude Code and Codex spawn processes?** They may fork child processes for tools, so we need to identify the right parent PID to avoid double-counting. Check the process tree.
-4. **Is `%cpu` from `ps` reliable for status?** Waiting for user input should show low CPU while active responses should show noticeable CPU. Validate this assumption.
+Resolved in code and validation workflow:
+
+1. ~~**What exactly does `GHOSTTY_SURFACE_ID` contain?**~~
+   ✓ Treated as an opaque identifier and displayed as a truncated prefix; no tab-index mapping attempted.
+2. ~~**Does `ps -wwwE` reliably show the full environment?**~~
+   ✓ `ps -wwwE` is primary; fallback to `ps -eww -o command=` if needed.
+3. ~~**How do Claude Code and Codex spawn processes?**~~
+   ✓ Parent/child PID ancestry is checked and nested sessions are deduplicated to avoid double-counting.
+4. ~~**Is `%cpu` from `ps` reliable for status?**~~
+   ✓ `%cpu` remains the status signal with configurable threshold; live verification is supported via `scripts/validate-prd-assumptions.sh`.
 
 ## Future Extensions
 
