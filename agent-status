@@ -135,6 +135,55 @@ def get_process_info(pids):
     return info
 
 
+def get_parent_map(pids):
+    """Get parent PID for each PID in one ps call."""
+    if not pids:
+        return {}
+    pid_str = ",".join(str(p) for p in pids)
+    try:
+        result = subprocess.run(
+            ["ps", "-p", pid_str, "-o", "pid=,ppid="],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return {}
+    except FileNotFoundError:
+        return {}
+
+    parent_map = {}
+    for line in result.stdout.strip().split("\n"):
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        try:
+            pid = int(parts[0])
+            ppid = int(parts[1])
+        except ValueError:
+            continue
+        parent_map[pid] = ppid
+    return parent_map
+
+
+def dedupe_nested_pids(pids, parent_map):
+    """Drop PID if any ancestor is also in pids."""
+    pid_set = set(pids)
+    deduped = []
+    for pid in pids:
+        seen = set()
+        parent = parent_map.get(pid)
+        nested = False
+        while parent and parent > 0 and parent not in seen:
+            if parent in pid_set:
+                nested = True
+                break
+            seen.add(parent)
+            parent = parent_map.get(parent)
+        if not nested:
+            deduped.append(pid)
+    return deduped
+
+
 def get_cwd(pid):
     """Resolve working directory for a process via lsof."""
     try:
@@ -394,6 +443,8 @@ def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
         pid for pid in pids
         if pid in proc_info and proc_info[pid]["tty"] not in ("??", "")
     ]
+    parent_map = get_parent_map(valid_pids)
+    valid_pids = dedupe_nested_pids(valid_pids, parent_map)
 
     # Separate cached vs uncached PIDs
     if cache is not None:

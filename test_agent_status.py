@@ -493,6 +493,40 @@ class TestGetProcessInfo(unittest.TestCase):
         self.assertIn(123, info)
 
 
+class TestGetParentMap(unittest.TestCase):
+    @patch("subprocess.run")
+    def test_parses_output(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="  123     1\n  456   123\n",
+        )
+        self.assertEqual(cs.get_parent_map([123, 456]), {123: 1, 456: 123})
+
+    def test_empty_pids(self):
+        self.assertEqual(cs.get_parent_map([]), {})
+
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_ps_not_found(self, _mock):
+        self.assertEqual(cs.get_parent_map([123]), {})
+
+
+class TestDedupeNestedPids(unittest.TestCase):
+    def test_nested_child_removed(self):
+        pids = [100, 200]
+        parent_map = {100: 1, 200: 100}
+        self.assertEqual(cs.dedupe_nested_pids(pids, parent_map), [100])
+
+    def test_siblings_retained(self):
+        pids = [100, 200]
+        parent_map = {100: 1, 200: 1}
+        self.assertEqual(cs.dedupe_nested_pids(pids, parent_map), [100, 200])
+
+    def test_handles_parent_cycle(self):
+        pids = [100, 200]
+        parent_map = {100: 200, 200: 100}
+        self.assertEqual(cs.dedupe_nested_pids(pids, parent_map), [])
+
+
 class TestGetCwd(unittest.TestCase):
     @patch("subprocess.run")
     def test_extracts_cwd(self, mock_run):
@@ -578,6 +612,7 @@ class TestSupportsColor(unittest.TestCase):
 
 
 class TestCollectSessions(unittest.TestCase):
+    @patch.object(cs, "get_parent_map", return_value={})
     @patch.object(cs, "get_git_branch", return_value="main")
     @patch.object(cs, "get_uptime", return_value=(120, "2m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value=None)
@@ -597,11 +632,13 @@ class TestCollectSessions(unittest.TestCase):
         self.assertEqual(sessions[0]["uptime"], "2m")
         self.assertEqual(sessions[0]["branch"], "main")
 
+    @patch.object(cs, "get_parent_map", return_value={})
     @patch.object(cs, "discover_claude_pids", return_value=[])
-    def test_no_processes(self, _mock):
+    def test_no_processes(self, *_mocks):
         sessions = cs.collect_sessions()
         self.assertEqual(sessions, [])
 
+    @patch.object(cs, "get_parent_map", return_value={})
     @patch.object(cs, "get_git_branch", return_value="dev")
     @patch.object(cs, "get_uptime", return_value=(60, "1m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value=None)
@@ -627,6 +664,7 @@ class TestCollectSessions(unittest.TestCase):
         self.assertEqual(sessions[2]["status"], "stopped")
         self.assertEqual(sessions[2]["project"], "beta")
 
+    @patch.object(cs, "get_parent_map", return_value={})
     @patch.object(cs, "get_git_branch", return_value="main")
     @patch.object(cs, "get_uptime", return_value=(60, "1m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value="surf-abc")
@@ -642,6 +680,7 @@ class TestCollectSessions(unittest.TestCase):
         self.assertEqual(cache[100]["cwd"], "/home/user/proj")
         self.assertEqual(cache[100]["surface_id"], "surf-abc")
 
+    @patch.object(cs, "get_parent_map", return_value={})
     @patch.object(cs, "get_git_branch", return_value="main")
     @patch.object(cs, "get_uptime", return_value=(60, "1m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value="surf-abc")
@@ -660,6 +699,7 @@ class TestCollectSessions(unittest.TestCase):
         self.assertEqual(sessions[0]["cwd"], "/home/user/proj")
         self.assertEqual(sessions[0]["surface_id"], "surf-abc")
 
+    @patch.object(cs, "get_parent_map", return_value={})
     @patch.object(cs, "get_git_branch", return_value="main")
     @patch.object(cs, "get_uptime", return_value=(60, "1m"))
     @patch.object(cs, "get_ghostty_surface_id", return_value=None)
@@ -676,6 +716,21 @@ class TestCollectSessions(unittest.TestCase):
         cs.collect_sessions(cache=cache)
         self.assertNotIn(100, cache)
         self.assertIn(200, cache)
+
+    @patch.object(cs, "get_git_branch", return_value="main")
+    @patch.object(cs, "get_uptime", return_value=(120, "2m"))
+    @patch.object(cs, "get_ghostty_surface_id", side_effect=[None, None])
+    @patch.object(cs, "get_cwds", return_value={100: "/home/user/proj", 200: "/home/user/proj"})
+    @patch.object(cs, "get_parent_map", return_value={100: 1, 200: 100})
+    @patch.object(cs, "get_process_info", return_value={
+        100: {"cpu": 15.0, "state": "R+", "tty": "ttys000"},
+        200: {"cpu": 10.0, "state": "R+", "tty": "ttys000"},
+    })
+    @patch.object(cs, "discover_claude_pids", return_value=[100, 200])
+    def test_dedupes_nested_sessions(self, *_mocks):
+        sessions = cs.collect_sessions()
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["pid"], 100)
 
 
 class TestFocusGhottySurface(unittest.TestCase):
