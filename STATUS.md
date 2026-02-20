@@ -11,7 +11,7 @@ Last updated: 2026-02-20
   - `stopped` when process state contains `T`
   - `active` when CPU is `>= threshold` (default `5.0`)
   - `idle` otherwise
-- CPU threshold is configurable via `--cpu-threshold` or `CLAUDE_STATUS_CPU_THRESHOLD`.
+- CPU threshold is configurable via `--cpu-threshold` or `AGENT_STATUS_CPU_THRESHOLD` (legacy `CLAUDE_STATUS_CPU_THRESHOLD` is also accepted).
 - `--watch --json` emits JSON snapshots without screen-clear escape codes.
 - `--json-v2` emits a stable JSON envelope (`schema_version`, `generated_at`, `sessions`).
 - `--alert` in watch mode notifies on `active -> idle` transitions.
