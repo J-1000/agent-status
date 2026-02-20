@@ -58,7 +58,9 @@ Ghostty sets environment variables per surface (e.g. `GHOSTTY_SURFACE_ID`). The 
 claude-status                      # default: print snapshot and exit
 claude-status --watch              # re-print every 2 seconds (like `watch`)
 claude-status --watch --interval 5 # custom refresh interval (> 0)
+claude-status --watch --interval-active 0.5 --interval-idle 5 # adaptive polling by status
 claude-status --json               # output as JSON for scripting/piping
+claude-status --json-v2            # output stable metadata envelope (schema + timestamp)
 claude-status --watch --json       # stream JSON snapshots (no screen clear)
 claude-status --goto <project>     # focus the Ghostty tab for a session
 claude-status --watch --alert      # notify when a session goes active → idle
@@ -101,9 +103,9 @@ claude-status --watch --alert      # notify when a session goes active → idle
 ## Future Extensions
 
 - **Configurable activity threshold:** Add `--cpu-threshold` (and optional env fallback) so active/idle classification is tunable per machine/workload.
-- **Stable machine-readable JSON envelope:** Add version/timestamp metadata (possibly via `--json-v2`) to make integrations safer over time.
+- ~~**Stable machine-readable JSON envelope:** Add version/timestamp metadata (possibly via `--json-v2`) to make integrations safer over time.~~ ✓ Shipped as `--json-v2`
 - **Smarter `--goto` matching:** Prioritize exact match, then prefix, then substring to reduce ambiguity without losing convenience.
-- **Adaptive watch polling:** Optional backoff or split intervals for active vs idle to reduce process-inspection overhead.
+- ~~**Adaptive watch polling:** Optional backoff or split intervals for active vs idle to reduce process-inspection overhead.~~ ✓ Shipped as `--interval-active` / `--interval-idle`
 - **Configurable alert events:** Allow notifying on additional transitions (`active->idle`, `active->stopped`, etc.) with cooldown controls.
 - **Additional edge-case tests:** Expand coverage around malformed env output, partial process-info rows, and transition behavior under watch mode.
 - **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
