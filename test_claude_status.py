@@ -154,6 +154,9 @@ class TestClassifyStatus(unittest.TestCase):
     def test_stopped_overrides_cpu(self):
         self.assertEqual(cs.classify_status(50.0, "T+"), "stopped")
 
+    def test_respects_custom_threshold(self):
+        self.assertEqual(cs.classify_status(3.0, "S+", cpu_threshold=2.5), "active")
+
 
 class TestDisambiguateProjects(unittest.TestCase):
     def test_no_duplicates(self):
@@ -711,6 +714,48 @@ class TestParseArgs(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 cs.parse_args()
 
+    @patch("sys.argv", ["claude-status", "--cpu-threshold", "2.5"])
+    def test_cpu_threshold_flag(self):
+        args = cs.parse_args()
+        self.assertEqual(args.cpu_threshold, 2.5)
+
+    @patch("sys.argv", ["claude-status", "--cpu-threshold", "-0.1"])
+    def test_cpu_threshold_negative_rejected(self):
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cs.parse_args()
+
+
+class TestResolveCpuThreshold(unittest.TestCase):
+    @patch.dict(os.environ, {}, clear=True)
+    def test_uses_default_when_no_arg_or_env(self):
+        args = Namespace(cpu_threshold=None)
+        self.assertEqual(cs.resolve_cpu_threshold(args), cs.DEFAULT_CPU_THRESHOLD)
+
+    @patch.dict(os.environ, {cs.CPU_THRESHOLD_ENV_VAR: "2.25"}, clear=True)
+    def test_uses_env_when_arg_missing(self):
+        args = Namespace(cpu_threshold=None)
+        self.assertEqual(cs.resolve_cpu_threshold(args), 2.25)
+
+    @patch.dict(os.environ, {cs.CPU_THRESHOLD_ENV_VAR: "oops"}, clear=True)
+    @patch.object(cs.sys, "stderr", new_callable=io.StringIO)
+    def test_invalid_env_falls_back_to_default(self, mock_stderr):
+        args = Namespace(cpu_threshold=None)
+        self.assertEqual(cs.resolve_cpu_threshold(args), cs.DEFAULT_CPU_THRESHOLD)
+        self.assertIn("Ignoring invalid", mock_stderr.getvalue())
+
+    @patch.dict(os.environ, {cs.CPU_THRESHOLD_ENV_VAR: "-1"}, clear=True)
+    @patch.object(cs.sys, "stderr", new_callable=io.StringIO)
+    def test_negative_env_falls_back_to_default(self, mock_stderr):
+        args = Namespace(cpu_threshold=None)
+        self.assertEqual(cs.resolve_cpu_threshold(args), cs.DEFAULT_CPU_THRESHOLD)
+        self.assertIn("Ignoring invalid", mock_stderr.getvalue())
+
+    @patch.dict(os.environ, {cs.CPU_THRESHOLD_ENV_VAR: "1.5"}, clear=True)
+    def test_arg_wins_over_env(self):
+        args = Namespace(cpu_threshold=4.0)
+        self.assertEqual(cs.resolve_cpu_threshold(args), 4.0)
+
 
 class TestHandleGoto(unittest.TestCase):
     def _make_session(self, project, surface_id="surf-1234"):
@@ -772,7 +817,7 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "collect_sessions", return_value=[])
     @patch.object(cs, "clear_screen")
     @patch.object(cs, "parse_args", return_value=Namespace(
-        watch=True, interval=1.0, json_output=True, alert=False, goto=None
+        watch=True, interval=1.0, json_output=True, alert=False, goto=None, cpu_threshold=None
     ))
     def test_watch_json_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep, _mock_stdout
@@ -786,7 +831,7 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "collect_sessions", return_value=[])
     @patch.object(cs, "clear_screen")
     @patch.object(cs, "parse_args", return_value=Namespace(
-        watch=True, interval=1.0, json_output=False, alert=False, goto=None
+        watch=True, interval=1.0, json_output=False, alert=False, goto=None, cpu_threshold=None
     ))
     def test_watch_table_clears_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
