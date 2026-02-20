@@ -14,6 +14,7 @@ Last updated: 2026-02-20
 - CPU threshold is configurable via `--cpu-threshold` or `CLAUDE_STATUS_CPU_THRESHOLD`.
 - `--watch --json` emits JSON snapshots without screen-clear escape codes.
 - `--alert` in watch mode notifies on `active -> idle` transitions.
+- `--goto` matches by project with priority: exact, then prefix, then substring.
 - `--goto` focuses matching Ghostty surface when available.
 
 ## Input constraints
