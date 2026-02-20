@@ -243,11 +243,17 @@ def send_bell():
 def send_notification(session):
     """Send a macOS desktop notification for a session."""
     project = session.get("project", "unknown")
+    script = (
+        'on run argv\n'
+        'display notification "Waiting for input" with title "claude-status" subtitle (item 1 of argv)\n'
+        "end run"
+    )
     try:
         subprocess.run(
             [
                 "osascript", "-e",
-                f'display notification "Waiting for input" with title "claude-status" subtitle "{project}"',
+                script,
+                project,
             ],
             capture_output=True,
             timeout=5,
