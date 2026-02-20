@@ -731,6 +731,7 @@ class TestHandleGoto(unittest.TestCase):
 
 
 class TestMainWatchBehavior(unittest.TestCase):
+    @patch.object(cs.sys, "stdout", new_callable=MagicMock)
     @patch.object(cs.time, "sleep", side_effect=KeyboardInterrupt)
     @patch.object(cs, "format_json", return_value="[]\n")
     @patch.object(cs, "collect_sessions", return_value=[])
@@ -739,11 +740,12 @@ class TestMainWatchBehavior(unittest.TestCase):
         watch=True, interval=1.0, json_output=True, alert=False, goto=None
     ))
     def test_watch_json_does_not_clear_screen(
-        self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep
+        self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep, _mock_stdout
     ):
         cs.main()
         mock_clear.assert_not_called()
 
+    @patch.object(cs.sys, "stdout", new_callable=MagicMock)
     @patch.object(cs.time, "sleep", side_effect=KeyboardInterrupt)
     @patch.object(cs, "format_table", return_value="table\n")
     @patch.object(cs, "collect_sessions", return_value=[])
@@ -752,7 +754,7 @@ class TestMainWatchBehavior(unittest.TestCase):
         watch=True, interval=1.0, json_output=False, alert=False, goto=None
     ))
     def test_watch_table_clears_screen(
-        self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep
+        self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
     ):
         cs.main()
         mock_clear.assert_called_once()
