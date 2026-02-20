@@ -27,6 +27,7 @@ chmod +x ~/bin/claude-status
 claude-status                      # print snapshot and exit
 claude-status --watch              # re-print every 2 seconds
 claude-status --watch --interval 5 # re-print every 5 seconds
+claude-status --watch --interval 0.5 # interval must be > 0
 claude-status --json               # output as JSON for scripting
 claude-status --watch --json       # stream JSON snapshots (no screen clear)
 claude-status --goto api-server    # focus the Ghostty tab for a session
