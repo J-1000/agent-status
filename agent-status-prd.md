@@ -1,4 +1,4 @@
-# claude-status — PRD
+# agent-status — PRD
 
 ## Problem
 
@@ -6,7 +6,7 @@ When running multiple Claude Code and Codex instances across Ghostty tabs and sp
 
 ## Solution
 
-A single CLI command (`claude-status`) that prints a snapshot of all running Claude/Codex sessions, showing which project each belongs to, what Ghostty surface it lives in, and whether it's actively working or idle.
+A single CLI command (`agent-status`) that prints a snapshot of all running Claude/Codex sessions, showing which project each belongs to, what Ghostty surface it lives in, and whether it's actively working or idle.
 
 ## Non-Goals
 
@@ -35,7 +35,7 @@ A single CLI command (`claude-status`) that prints a snapshot of all running Cla
 ### Output Format
 
 ```
-$ claude-status
+$ agent-status
 
   ● api-server        main        active    2h15m   a1b2c3d4
   ◐ frontend          feature/ui  idle      45m     e5f6a7b8
@@ -55,20 +55,20 @@ Ghostty sets environment variables per surface (e.g. `GHOSTTY_SURFACE_ID`). The 
 ## CLI Interface
 
 ```
-claude-status                      # default: print snapshot and exit
-claude-status --watch              # re-print every 2 seconds (like `watch`)
-claude-status --watch --interval 5 # custom refresh interval (> 0)
-claude-status --watch --interval-active 0.5 --interval-idle 5 # adaptive polling by status
-claude-status --json               # output as JSON for scripting/piping
-claude-status --json-v2            # output stable metadata envelope (schema + timestamp)
-claude-status --watch --json       # stream JSON snapshots (no screen clear)
-claude-status --goto <project>     # focus the Ghostty tab for a session
-claude-status --watch --alert      # notify when a session goes active → idle
+agent-status                      # default: print snapshot and exit
+agent-status --watch              # re-print every 2 seconds (like `watch`)
+agent-status --watch --interval 5 # custom refresh interval (> 0)
+agent-status --watch --interval-active 0.5 --interval-idle 5 # adaptive polling by status
+agent-status --json               # output as JSON for scripting/piping
+agent-status --json-v2            # output stable metadata envelope (schema + timestamp)
+agent-status --watch --json       # stream JSON snapshots (no screen clear)
+agent-status --goto <project>     # focus the Ghostty tab for a session
+agent-status --watch --alert      # notify when a session goes active → idle
 ```
 
 ### Tab Switching (`--goto`)
 
-`claude-status --goto <project>` focuses the Ghostty surface running the matching session. Matching is case-insensitive with this priority: exact name, then prefix, then substring. Behavior:
+`agent-status --goto <project>` focuses the Ghostty surface running the matching session. Matching is case-insensitive with this priority: exact name, then prefix, then substring. Behavior:
 
 - **0 matches:** prints an error and lists available sessions (exit 1)
 - **Multiple matches:** prints matching sessions and asks to be more specific (exit 1)
@@ -77,7 +77,7 @@ claude-status --watch --alert      # notify when a session goes active → idle
 
 ### Watch Alerts (`--alert`)
 
-`claude-status --watch --alert` fires notifications when a session transitions from **active** to **idle** (agent finished working, waiting for input). Behavior:
+`agent-status --watch --alert` fires notifications when a session transitions from **active** to **idle** (agent finished working, waiting for input). Behavior:
 
 - Tracks each session's status by PID between watch cycles
 - On active→idle transition: terminal bell (one per cycle) + macOS desktop notification (one per session) via `osascript`
@@ -102,7 +102,7 @@ claude-status --watch --alert      # notify when a session goes active → idle
 
 ## Future Extensions
 
-- ~~**Configurable activity threshold:** Add `--cpu-threshold` (and optional env fallback) so active/idle classification is tunable per machine/workload.~~ ✓ Shipped as `--cpu-threshold` / `CLAUDE_STATUS_CPU_THRESHOLD`
+- ~~**Configurable activity threshold:** Add `--cpu-threshold` (and optional env fallback) so active/idle classification is tunable per machine/workload.~~ ✓ Shipped as `--cpu-threshold` / `AGENT_STATUS_CPU_THRESHOLD` (legacy `CLAUDE_STATUS_CPU_THRESHOLD` also accepted)
 - ~~**Stable machine-readable JSON envelope:** Add version/timestamp metadata (possibly via `--json-v2`) to make integrations safer over time.~~ ✓ Shipped as `--json-v2`
 - ~~**Smarter `--goto` matching:** Prioritize exact match, then prefix, then substring to reduce ambiguity without losing convenience.~~ ✓ Shipped with case-insensitive tiered match precedence
 - ~~**Adaptive watch polling:** Optional backoff or split intervals for active vs idle to reduce process-inspection overhead.~~ ✓ Shipped as `--interval-active` / `--interval-idle`
