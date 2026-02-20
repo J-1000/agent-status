@@ -28,7 +28,9 @@ claude-status                      # print snapshot and exit
 claude-status --watch              # re-print every 2 seconds
 claude-status --watch --interval 5 # re-print every 5 seconds
 claude-status --watch --interval 0.5 # interval must be > 0
+claude-status --watch --interval-active 0.5 --interval-idle 5 # adaptive polling
 claude-status --json               # output as JSON for scripting
+claude-status --json-v2            # output versioned JSON envelope with metadata
 claude-status --watch --json       # stream JSON snapshots (no screen clear)
 claude-status --goto api-server    # focus the Ghostty tab for a session
 claude-status --watch --alert      # get notified when a session finishes
@@ -48,6 +50,22 @@ claude-status --goto frontend
 ```
 
 The argument is a case-insensitive project match. Matching priority is: exact project name, then prefix match, then substring match. If there are multiple matches at the selected tier you'll be asked to be more specific. This uses Ghostty's `ghostty://present-surface/` URL scheme, so it only works for sessions running inside Ghostty.
+
+## JSON Output
+
+- `--json`: array of session objects (legacy format)
+- `--json-v2`: stable envelope:
+  - `schema_version`
+  - `generated_at` (UTC ISO-8601)
+  - `sessions`
+
+## Adaptive Watch Polling
+
+When using `--watch`, you can tune polling frequency by activity:
+
+- `--interval-active`: used when any session is `active`
+- `--interval-idle`: used when no sessions are `active`
+- falls back to `--interval` when per-state intervals are not provided
 
 ## How it works
 
