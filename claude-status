@@ -544,7 +544,8 @@ def main():
         previous_statuses = {}
         try:
             while True:
-                clear_screen()
+                if not args.json_output:
+                    clear_screen()
                 sessions = collect_sessions(cache=cache)
 
                 transitioned_pids = set()
