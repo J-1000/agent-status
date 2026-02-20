@@ -32,6 +32,7 @@ claude-status --watch --interval-active 0.5 --interval-idle 5 # adaptive polling
 claude-status --json               # output as JSON for scripting
 claude-status --json-v2            # output versioned JSON envelope with metadata
 claude-status --watch --json       # stream JSON snapshots (no screen clear)
+claude-status --watch --json-v2    # stream versioned JSON envelopes
 claude-status --goto api-server    # focus the Ghostty tab for a session
 claude-status --watch --alert      # get notified when a session finishes
 claude-status --cpu-threshold 2.5  # tune active/idle classification
@@ -58,6 +59,7 @@ The argument is a case-insensitive project match. Matching priority is: exact pr
   - `schema_version`
   - `generated_at` (UTC ISO-8601)
   - `sessions`
+- in watch mode, both JSON formats stream snapshots without screen clears
 
 ## Adaptive Watch Polling
 

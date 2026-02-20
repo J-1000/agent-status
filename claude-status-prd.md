@@ -102,9 +102,9 @@ claude-status --watch --alert      # notify when a session goes active → idle
 
 ## Future Extensions
 
-- **Configurable activity threshold:** Add `--cpu-threshold` (and optional env fallback) so active/idle classification is tunable per machine/workload.
+- ~~**Configurable activity threshold:** Add `--cpu-threshold` (and optional env fallback) so active/idle classification is tunable per machine/workload.~~ ✓ Shipped as `--cpu-threshold` / `CLAUDE_STATUS_CPU_THRESHOLD`
 - ~~**Stable machine-readable JSON envelope:** Add version/timestamp metadata (possibly via `--json-v2`) to make integrations safer over time.~~ ✓ Shipped as `--json-v2`
-- **Smarter `--goto` matching:** Prioritize exact match, then prefix, then substring to reduce ambiguity without losing convenience.
+- ~~**Smarter `--goto` matching:** Prioritize exact match, then prefix, then substring to reduce ambiguity without losing convenience.~~ ✓ Shipped with tiered match precedence
 - ~~**Adaptive watch polling:** Optional backoff or split intervals for active vs idle to reduce process-inspection overhead.~~ ✓ Shipped as `--interval-active` / `--interval-idle`
 - **Configurable alert events:** Allow notifying on additional transitions (`active->idle`, `active->stopped`, etc.) with cooldown controls.
 - **Additional edge-case tests:** Expand coverage around malformed env output, partial process-info rows, and transition behavior under watch mode.
