@@ -3,6 +3,7 @@
 
 import argparse
 import concurrent.futures
+from datetime import datetime, timezone
 import json
 import os
 import subprocess
@@ -13,6 +14,7 @@ import time
 SESSION_COMMANDS = {"claude", "codex"}
 DEFAULT_CPU_THRESHOLD = 5.0
 CPU_THRESHOLD_ENV_VAR = "CLAUDE_STATUS_CPU_THRESHOLD"
+JSON_V2_SCHEMA_VERSION = 1
 
 
 def positive_float(value):
@@ -43,7 +45,19 @@ def parse_args():
         help="refresh interval for --watch in seconds (default: 2)",
     )
     parser.add_argument(
+        "--interval-active", type=positive_float, default=None, metavar="SECS",
+        help="watch interval while any session is active (defaults to --interval)",
+    )
+    parser.add_argument(
+        "--interval-idle", type=positive_float, default=None, metavar="SECS",
+        help="watch interval when no sessions are active (defaults to --interval)",
+    )
+    parser.add_argument(
         "--json", action="store_true", dest="json_output", help="output as JSON"
+    )
+    parser.add_argument(
+        "--json-v2", action="store_true",
+        help="output JSON envelope with metadata",
     )
     parser.add_argument(
         "--alert", action="store_true",
@@ -533,6 +547,29 @@ def format_json(sessions):
     return json.dumps(sessions, indent=2) + "\n"
 
 
+def current_utc_iso8601():
+    """Return current UTC time in RFC3339-like format."""
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def format_json_v2(sessions, generated_at=None):
+    """Format sessions as versioned JSON envelope with metadata."""
+    payload = {
+        "schema_version": JSON_V2_SCHEMA_VERSION,
+        "generated_at": generated_at or current_utc_iso8601(),
+        "sessions": sessions,
+    }
+    return json.dumps(payload, indent=2) + "\n"
+
+
+def resolve_watch_interval(args, sessions):
+    """Resolve watch-mode sleep interval, optionally adapting by activity."""
+    has_active = any(s["status"] == "active" for s in sessions)
+    if has_active:
+        return args.interval_active if args.interval_active is not None else args.interval
+    return args.interval_idle if args.interval_idle is not None else args.interval
+
+
 def print_snapshot(json_output=False, cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Collect and print one snapshot."""
     sessions = collect_sessions(cache=cache, cpu_threshold=cpu_threshold)
@@ -621,6 +658,7 @@ def handle_goto(project_query, cpu_threshold=DEFAULT_CPU_THRESHOLD):
 def main():
     args = parse_args()
     cpu_threshold = resolve_cpu_threshold(args)
+    json_output = args.json_output or args.json_v2
 
     if args.goto:
         sys.exit(handle_goto(args.goto, cpu_threshold=cpu_threshold))
@@ -630,7 +668,7 @@ def main():
         previous_statuses = {}
         try:
             while True:
-                if not args.json_output:
+                if not json_output:
                     clear_screen()
                 sessions = collect_sessions(cache=cache, cpu_threshold=cpu_threshold)
 
@@ -641,15 +679,21 @@ def main():
 
                 previous_statuses = {s["pid"]: s["status"] for s in sessions}
 
-                if args.json_output:
+                if args.json_v2:
+                    sys.stdout.write(format_json_v2(sessions))
+                elif args.json_output:
                     sys.stdout.write(format_json(sessions))
                 else:
                     sys.stdout.write(format_table(sessions, transitioned_pids=transitioned_pids))
-                time.sleep(args.interval)
+                time.sleep(resolve_watch_interval(args, sessions))
         except KeyboardInterrupt:
             pass
     else:
-        print_snapshot(json_output=args.json_output, cpu_threshold=cpu_threshold)
+        if args.json_v2:
+            sessions = collect_sessions(cpu_threshold=cpu_threshold)
+            sys.stdout.write(format_json_v2(sessions))
+        else:
+            print_snapshot(json_output=args.json_output, cpu_threshold=cpu_threshold)
 
 
 if __name__ == "__main__":
