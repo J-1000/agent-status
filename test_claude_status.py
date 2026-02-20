@@ -689,6 +689,16 @@ class TestParseArgs(unittest.TestCase):
         args = cs.parse_args()
         self.assertFalse(args.alert)
 
+    @patch("sys.argv", ["claude-status", "--interval", "0"])
+    def test_interval_zero_rejected(self):
+        with self.assertRaises(SystemExit):
+            cs.parse_args()
+
+    @patch("sys.argv", ["claude-status", "--interval", "-1"])
+    def test_interval_negative_rejected(self):
+        with self.assertRaises(SystemExit):
+            cs.parse_args()
+
 
 class TestHandleGoto(unittest.TestCase):
     def _make_session(self, project, surface_id="surf-1234"):
