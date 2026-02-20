@@ -37,8 +37,19 @@ class TestSendNotification(unittest.TestCase):
         cs.send_notification({"project": "my-api"})
         args = mock_run.call_args[0][0]
         self.assertEqual(args[0], "osascript")
-        self.assertIn("my-api", args[2])
         self.assertIn("display notification", args[2])
+        self.assertEqual(args[3], "my-api")
+
+    @patch("subprocess.run")
+    def test_project_passed_as_arg_not_interpolated(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0)
+        project = 'my-api" & do shell script "echo pwned" & "'
+        cs.send_notification({"project": project})
+        args = mock_run.call_args[0][0]
+        self.assertEqual(args[0], "osascript")
+        self.assertIn("item 1 of argv", args[2])
+        self.assertEqual(args[3], project)
+        self.assertNotIn(project, args[2])
 
     @patch("subprocess.run", side_effect=FileNotFoundError)
     def test_osascript_not_found_silenced(self, _mock):
