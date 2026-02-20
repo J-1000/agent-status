@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""claude-status — show running Claude Code sessions across Ghostty tabs."""
+"""claude-status — show running Claude/Codex sessions across Ghostty tabs."""
 
 import argparse
 import concurrent.futures
@@ -8,6 +8,9 @@ import os
 import subprocess
 import sys
 import time
+
+
+SESSION_COMMANDS = {"claude", "codex"}
 
 
 def positive_float(value):
@@ -20,7 +23,7 @@ def positive_float(value):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Show running Claude Code sessions",
+        description="Show running Claude/Codex sessions",
     )
     parser.add_argument(
         "--watch", action="store_true", help="re-print continuously"
@@ -44,7 +47,7 @@ def parse_args():
 
 
 def discover_claude_pids():
-    """Find PIDs of running `claude` processes via ps (more reliable than pgrep)."""
+    """Find PIDs of running claude/codex processes via ps."""
     try:
         result = subprocess.run(
             ["ps", "-ax", "-o", "pid=,comm="],
@@ -56,7 +59,7 @@ def discover_claude_pids():
         pids = []
         for line in result.stdout.strip().split("\n"):
             parts = line.strip().split(None, 1)
-            if len(parts) == 2 and parts[1] == "claude":
+            if len(parts) == 2 and parts[1] in SESSION_COMMANDS:
                 pids.append(int(parts[0]))
         return pids
     except FileNotFoundError:
@@ -311,7 +314,7 @@ def disambiguate_projects(sessions):
 
 
 def collect_sessions(cache=None):
-    """Collect all Claude Code session data.
+    """Collect all Claude/Codex session data.
 
     If cache (dict) is provided, CWD and surface_id are cached across calls
     and only fetched for newly discovered PIDs.  Stale entries are pruned.
@@ -427,7 +430,7 @@ YELLOW = "\033[33m"
 def format_table(sessions, transitioned_pids=None):
     """Format sessions as an aligned table with optional ANSI colors."""
     if not sessions:
-        return "  No active Claude Code sessions found.\n"
+        return "  No active Claude/Codex sessions found.\n"
 
     use_color = supports_color()
     transitioned_pids = transitioned_pids or set()
