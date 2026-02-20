@@ -2,11 +2,11 @@
 
 ## Problem
 
-When running multiple Claude Code instances across Ghostty tabs and splits, there's no quick way to see which sessions are active, idle, or waiting for input without cycling through each one manually.
+When running multiple Claude Code and Codex instances across Ghostty tabs and splits, there's no quick way to see which sessions are active, idle, or waiting for input without cycling through each one manually.
 
 ## Solution
 
-A single CLI command (`claude-status`) that prints a snapshot of all running Claude Code sessions, showing which project each belongs to, what Ghostty surface it lives in, and whether it's actively working or idle.
+A single CLI command (`claude-status`) that prints a snapshot of all running Claude/Codex sessions, showing which project each belongs to, what Ghostty surface it lives in, and whether it's actively working or idle.
 
 ## Non-Goals
 
@@ -19,7 +19,7 @@ A single CLI command (`claude-status`) that prints a snapshot of all running Cla
 
 ### Discovery
 
-1. Scan for running `claude` processes using `pgrep -x claude` or `ps -ax`
+1. Scan for running `claude` and `codex` processes using `ps -ax`
 2. For each process, resolve the working directory via `lsof -a -p <pid> -d cwd -Fn` to determine the project
 3. Read the process environment via `ps -p <pid> -wwwE` to extract `GHOSTTY_SURFACE_ID` (Ghostty injects this env var into each shell session)
 4. Read CPU usage via `ps -p <pid> -o %cpu=` to determine active vs idle (kernel-smoothed average, no manual sampling needed)
@@ -28,8 +28,8 @@ A single CLI command (`claude-status`) that prints a snapshot of all running Cla
 
 | Status | Condition | Display |
 |---|---|---|
-| **active** | CPU usage above threshold (~5%) | `●` green |
-| **idle** | CPU usage near zero, process alive | `◐` yellow |
+| **active** | CPU usage at or above threshold (`>= 5%`) | `●` green |
+| **idle** | CPU usage below threshold (`< 5%`), process alive | `◐` yellow |
 | **stopped** | Process in stopped state | `■` grey |
 
 ### Output Format
@@ -57,8 +57,9 @@ Ghostty sets environment variables per surface (e.g. `GHOSTTY_SURFACE_ID`). The 
 ```
 claude-status                      # default: print snapshot and exit
 claude-status --watch              # re-print every 2 seconds (like `watch`)
-claude-status --watch --interval 5 # custom refresh interval
+claude-status --watch --interval 5 # custom refresh interval (> 0)
 claude-status --json               # output as JSON for scripting/piping
+claude-status --watch --json       # stream JSON snapshots (no screen clear)
 claude-status --goto <project>     # focus the Ghostty tab for a session
 claude-status --watch --alert      # notify when a session goes active → idle
 ```
@@ -74,7 +75,7 @@ claude-status --watch --alert      # notify when a session goes active → idle
 
 ### Watch Alerts (`--alert`)
 
-`claude-status --watch --alert` fires notifications when a session transitions from **active** to **idle** (Claude finished working, waiting for input). Behavior:
+`claude-status --watch --alert` fires notifications when a session transitions from **active** to **idle** (agent finished working, waiting for input). Behavior:
 
 - Tracks each session's status by PID between watch cycles
 - On active→idle transition: terminal bell (one per cycle) + macOS desktop notification (one per session) via `osascript`
@@ -93,9 +94,9 @@ claude-status --watch --alert      # notify when a session goes active → idle
 ## Open Questions to Resolve During Implementation
 
 1. **What exactly does `GHOSTTY_SURFACE_ID` contain?** Test by running `env | grep GHOSTTY` in different tabs and splits. Determine whether the value encodes tab index, split position, or is just an opaque UUID.
-2. **Does `ps -wwwE` reliably show the full environment?** Verify that `GHOSTTY_SURFACE_ID` appears in the output for Claude Code processes. If not, investigate alternatives like `KERN_PROCARGS2` sysctl.
-3. **How does Claude Code spawn processes?** It may fork child processes for tools, so we need to identify the right parent PID to avoid double-counting. Check the process tree.
-4. **Is `%cpu` from `ps` reliable for status?** Claude Code waiting for user input should show ~0% CPU. Claude Code streaming a response should show noticeable CPU. Validate this assumption.
+2. **Does `ps -wwwE` reliably show the full environment?** Verify that `GHOSTTY_SURFACE_ID` appears in the output for Claude/Codex processes. If not, investigate alternatives like `KERN_PROCARGS2` sysctl.
+3. **How do Claude Code and Codex spawn processes?** They may fork child processes for tools, so we need to identify the right parent PID to avoid double-counting. Check the process tree.
+4. **Is `%cpu` from `ps` reliable for status?** Waiting for user input should show low CPU while active responses should show noticeable CPU. Validate this assumption.
 
 ## Future Extensions
 
