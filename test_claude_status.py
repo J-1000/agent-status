@@ -198,6 +198,12 @@ class TestParseEtime(unittest.TestCase):
     def test_whitespace(self):
         self.assertEqual(cs.parse_etime("  10:05  "), 605)
 
+    def test_invalid_format_returns_none(self):
+        self.assertIsNone(cs.parse_etime("not-a-time"))
+
+    def test_invalid_numeric_parts_return_none(self):
+        self.assertIsNone(cs.parse_etime("2-xx:15:30"))
+
 
 class TestFormatDuration(unittest.TestCase):
     def test_seconds(self):
@@ -242,6 +248,13 @@ class TestGetUptime(unittest.TestCase):
 
     @patch("subprocess.run", side_effect=FileNotFoundError)
     def test_ps_not_found(self, _mock):
+        secs, fmt = cs.get_uptime(123)
+        self.assertIsNone(secs)
+        self.assertEqual(fmt, "-")
+
+    @patch("subprocess.run")
+    def test_malformed_etime_returns_unknown(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="bad-value\n")
         secs, fmt = cs.get_uptime(123)
         self.assertIsNone(secs)
         self.assertEqual(fmt, "-")
