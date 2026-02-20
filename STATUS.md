@@ -34,4 +34,13 @@ Last updated: 2026-02-20
 ## Verification baseline
 
 - Unit tests: `python3 -m unittest -q`
-- Latest observed result: `122 tests`, `OK`
+- Latest observed result: `130 tests`, `OK`
+
+## PRD open-question validation
+
+- Added reproducible checker: `scripts/validate-prd-assumptions.sh`
+- Run it while you have live `claude`/`codex` sessions in Ghostty to verify:
+  - `GHOSTTY_SURFACE_ID` shape across tabs/splits
+  - `ps -wwwE` visibility, with `ps -eww -o command=` fallback
+  - parent/child PID chains for nested-session de-duplication
+  - `%cpu` behavior while idle vs actively generating
