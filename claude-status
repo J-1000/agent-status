@@ -156,18 +156,23 @@ def get_ghostty_surface_id(pid):
 def parse_etime(etime):
     """Parse ps etime format [[DD-]HH:]MM:SS to total seconds."""
     etime = etime.strip()
+    if not etime:
+        return None
     days = 0
-    if "-" in etime:
-        day_part, etime = etime.split("-", 1)
-        days = int(day_part)
-    parts = etime.split(":")
-    if len(parts) == 3:
-        hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
-    elif len(parts) == 2:
-        hours = 0
-        minutes, seconds = int(parts[0]), int(parts[1])
-    else:
-        return 0
+    try:
+        if "-" in etime:
+            day_part, etime = etime.split("-", 1)
+            days = int(day_part)
+        parts = etime.split(":")
+        if len(parts) == 3:
+            hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
+        elif len(parts) == 2:
+            hours = 0
+            minutes, seconds = int(parts[0]), int(parts[1])
+        else:
+            return None
+    except ValueError:
+        return None
     return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
@@ -198,7 +203,8 @@ def get_uptime(pid):
         )
         if result.returncode == 0 and result.stdout.strip():
             secs = parse_etime(result.stdout)
-            return (secs, format_duration(secs))
+            if secs is not None:
+                return (secs, format_duration(secs))
     except FileNotFoundError:
         pass
     return (None, "-")
