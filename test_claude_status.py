@@ -2,6 +2,7 @@
 """Tests for claude-status."""
 
 import json
+import io
 import os
 import subprocess
 import sys
@@ -691,13 +692,15 @@ class TestParseArgs(unittest.TestCase):
 
     @patch("sys.argv", ["claude-status", "--interval", "0"])
     def test_interval_zero_rejected(self):
-        with self.assertRaises(SystemExit):
-            cs.parse_args()
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cs.parse_args()
 
     @patch("sys.argv", ["claude-status", "--interval", "-1"])
     def test_interval_negative_rejected(self):
-        with self.assertRaises(SystemExit):
-            cs.parse_args()
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cs.parse_args()
 
 
 class TestHandleGoto(unittest.TestCase):
