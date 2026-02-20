@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import unittest
+from argparse import Namespace
 from unittest.mock import patch, MagicMock
 
 # Import claude-status despite the hyphen and no .py extension
@@ -727,6 +728,34 @@ class TestHandleGoto(unittest.TestCase):
         mock_collect.return_value = [self._make_session("api-server", surface_id=None)]
         result = cs.handle_goto("api-server")
         self.assertEqual(result, 1)
+
+
+class TestMainWatchBehavior(unittest.TestCase):
+    @patch.object(cs.time, "sleep", side_effect=KeyboardInterrupt)
+    @patch.object(cs, "format_json", return_value="[]\n")
+    @patch.object(cs, "collect_sessions", return_value=[])
+    @patch.object(cs, "clear_screen")
+    @patch.object(cs, "parse_args", return_value=Namespace(
+        watch=True, interval=1.0, json_output=True, alert=False, goto=None
+    ))
+    def test_watch_json_does_not_clear_screen(
+        self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep
+    ):
+        cs.main()
+        mock_clear.assert_not_called()
+
+    @patch.object(cs.time, "sleep", side_effect=KeyboardInterrupt)
+    @patch.object(cs, "format_table", return_value="table\n")
+    @patch.object(cs, "collect_sessions", return_value=[])
+    @patch.object(cs, "clear_screen")
+    @patch.object(cs, "parse_args", return_value=Namespace(
+        watch=True, interval=1.0, json_output=False, alert=False, goto=None
+    ))
+    def test_watch_table_clears_screen(
+        self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep
+    ):
+        cs.main()
+        mock_clear.assert_called_once()
 
 
 if __name__ == "__main__":
