@@ -6,9 +6,10 @@ import io
 import os
 import subprocess
 import sys
+import time
 import unittest
 from argparse import Namespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 # Import agent-status despite the hyphen and no .py extension
 import importlib.machinery
@@ -36,7 +37,7 @@ class TestSendNotification(unittest.TestCase):
     @patch("subprocess.run")
     def test_calls_osascript_with_project(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
-        cs.send_notification({"project": "my-api"})
+        cs.send_notification({"project": "my-api"}, {"from": "active", "to": "idle"})
         args = mock_run.call_args[0][0]
         self.assertEqual(args[0], "osascript")
         self.assertIn("display notification", args[2])
@@ -46,7 +47,7 @@ class TestSendNotification(unittest.TestCase):
     def test_project_passed_as_arg_not_interpolated(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0)
         project = 'my-api" & do shell script "echo pwned" & "'
-        cs.send_notification({"project": project})
+        cs.send_notification({"project": project}, {"from": "active", "to": "idle"})
         args = mock_run.call_args[0][0]
         self.assertEqual(args[0], "osascript")
         self.assertIn("item 1 of argv", args[2])
@@ -55,43 +56,44 @@ class TestSendNotification(unittest.TestCase):
 
     @patch("subprocess.run", side_effect=FileNotFoundError)
     def test_osascript_not_found_silenced(self, _mock):
-        cs.send_notification({"project": "test"})  # should not raise
+        cs.send_notification({"project": "test"}, {"from": "active", "to": "idle"})  # should not raise
 
     @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="osascript", timeout=5))
     def test_osascript_timeout_silenced(self, _mock):
-        cs.send_notification({"project": "test"})  # should not raise
+        cs.send_notification({"project": "test"}, {"from": "active", "to": "idle"})  # should not raise
 
     @patch("subprocess.run")
     def test_nonzero_exit_silenced(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1)
-        cs.send_notification({"project": "test"})  # should not raise
+        cs.send_notification({"project": "test"}, {"from": "active", "to": "idle"})  # should not raise
 
 
 class TestDetectTransitions(unittest.TestCase):
     def test_active_to_idle_detected(self):
         prev = {100: "active"}
         sessions = [{"pid": 100, "status": "idle"}]
-        self.assertEqual(cs.detect_transitions(prev, sessions), {100})
+        transitions = cs.detect_transitions(prev, sessions, [("active", "idle")])
+        self.assertEqual(transitions, [{"pid": 100, "from": "active", "to": "idle"}])
 
     def test_idle_to_active_ignored(self):
         prev = {100: "idle"}
         sessions = [{"pid": 100, "status": "active"}]
-        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+        self.assertEqual(cs.detect_transitions(prev, sessions, [("active", "idle")]), [])
 
     def test_active_to_stopped_ignored(self):
         prev = {100: "active"}
         sessions = [{"pid": 100, "status": "stopped"}]
-        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+        self.assertEqual(cs.detect_transitions(prev, sessions, [("active", "idle")]), [])
 
     def test_new_session_ignored(self):
         prev = {}
         sessions = [{"pid": 100, "status": "idle"}]
-        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+        self.assertEqual(cs.detect_transitions(prev, sessions, [("active", "idle")]), [])
 
     def test_disappeared_session_ignored(self):
         prev = {100: "active"}
         sessions = []
-        self.assertEqual(cs.detect_transitions(prev, sessions), set())
+        self.assertEqual(cs.detect_transitions(prev, sessions, [("active", "idle")]), [])
 
     def test_multiple_transitions(self):
         prev = {100: "active", 200: "active", 300: "idle"}
@@ -100,18 +102,25 @@ class TestDetectTransitions(unittest.TestCase):
             {"pid": 200, "status": "idle"},
             {"pid": 300, "status": "active"},
         ]
-        self.assertEqual(cs.detect_transitions(prev, sessions), {100, 200})
+        transitions = cs.detect_transitions(prev, sessions, [("active", "idle")])
+        self.assertEqual(
+            transitions,
+            [
+                {"pid": 100, "from": "active", "to": "idle"},
+                {"pid": 200, "from": "active", "to": "idle"},
+            ],
+        )
 
     def test_empty_previous(self):
         sessions = [{"pid": 100, "status": "idle"}]
-        self.assertEqual(cs.detect_transitions({}, sessions), set())
+        self.assertEqual(cs.detect_transitions({}, sessions, [("active", "idle")]), [])
 
 
 class TestAlertTransitions(unittest.TestCase):
     @patch.object(cs, "send_notification")
     @patch.object(cs, "send_bell")
     def test_no_transitions_no_calls(self, mock_bell, mock_notif):
-        cs.alert_transitions([], set())
+        self.assertEqual(cs.alert_transitions([], []), [])
         mock_bell.assert_not_called()
         mock_notif.assert_not_called()
 
@@ -119,9 +128,14 @@ class TestAlertTransitions(unittest.TestCase):
     @patch.object(cs, "send_bell")
     def test_single_transition(self, mock_bell, mock_notif):
         sessions = [{"pid": 100, "project": "api"}]
-        cs.alert_transitions(sessions, {100})
+        transitions = [{"pid": 100, "from": "active", "to": "idle"}]
+        alerted = cs.alert_transitions(sessions, transitions)
+        self.assertEqual(alerted, transitions)
         mock_bell.assert_called_once()
-        mock_notif.assert_called_once_with({"pid": 100, "project": "api"})
+        mock_notif.assert_called_once_with(
+            {"pid": 100, "project": "api"},
+            {"pid": 100, "from": "active", "to": "idle"},
+        )
 
     @patch.object(cs, "send_notification")
     @patch.object(cs, "send_bell")
@@ -130,9 +144,29 @@ class TestAlertTransitions(unittest.TestCase):
             {"pid": 100, "project": "api"},
             {"pid": 200, "project": "web"},
         ]
-        cs.alert_transitions(sessions, {100, 200})
+        transitions = [
+            {"pid": 100, "from": "active", "to": "idle"},
+            {"pid": 200, "from": "active", "to": "idle"},
+        ]
+        cs.alert_transitions(sessions, transitions)
         mock_bell.assert_called_once()
         self.assertEqual(mock_notif.call_count, 2)
+
+    @patch.object(cs, "send_notification")
+    @patch.object(cs, "send_bell")
+    def test_cooldown_skips_recent_alerts(self, mock_bell, mock_notif):
+        sessions = [{"pid": 100, "project": "api"}]
+        transitions = [{"pid": 100, "from": "active", "to": "idle"}]
+        last_alerts = {(100, "active", "idle"): time.monotonic()}
+        alerted = cs.alert_transitions(
+            sessions,
+            transitions,
+            cooldown_seconds=10.0,
+            last_alerts=last_alerts,
+        )
+        self.assertEqual(alerted, [])
+        mock_bell.assert_not_called()
+        mock_notif.assert_not_called()
 
 
 class TestClassifyStatus(unittest.TestCase):
@@ -793,6 +827,7 @@ class TestParseArgs(unittest.TestCase):
     def test_alert_flag_default_false(self):
         args = cs.parse_args()
         self.assertFalse(args.alert)
+        self.assertEqual(args.alert_on, [("active", "idle")])
 
     @patch("sys.argv", ["agent-status", "--interval", "0"])
     def test_interval_zero_rejected(self):
@@ -839,6 +874,22 @@ class TestParseArgs(unittest.TestCase):
         with patch("sys.stderr", new=io.StringIO()):
             with self.assertRaises(SystemExit):
                 cs.parse_args()
+
+    @patch("sys.argv", ["agent-status", "--alert-on", "active->idle,active->stopped"])
+    def test_alert_on_flag(self):
+        args = cs.parse_args()
+        self.assertEqual(args.alert_on, [("active", "idle"), ("active", "stopped")])
+
+    @patch("sys.argv", ["agent-status", "--alert-on", "active-idle"])
+    def test_alert_on_invalid_rejected(self):
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cs.parse_args()
+
+    @patch("sys.argv", ["agent-status", "--alert-cooldown", "2.5"])
+    def test_alert_cooldown_flag(self):
+        args = cs.parse_args()
+        self.assertEqual(args.alert_cooldown, 2.5)
 
 
 class TestResolveWatchInterval(unittest.TestCase):
@@ -1008,7 +1059,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "clear_screen")
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
-        json_output=True, json_v2=False, alert=False, goto=None, cpu_threshold=None
+        json_output=True, json_v2=False, alert=False, goto=None, cpu_threshold=None,
+        alert_on=[("active", "idle")], alert_cooldown=0.0
     ))
     def test_watch_json_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep, _mock_stdout
@@ -1023,7 +1075,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "clear_screen")
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
-        json_output=False, json_v2=False, alert=False, goto=None, cpu_threshold=None
+        json_output=False, json_v2=False, alert=False, goto=None, cpu_threshold=None,
+        alert_on=[("active", "idle")], alert_cooldown=0.0
     ))
     def test_watch_table_clears_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
@@ -1038,7 +1091,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "clear_screen")
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
-        json_output=False, json_v2=True, alert=False, goto=None, cpu_threshold=None
+        json_output=False, json_v2=True, alert=False, goto=None, cpu_threshold=None,
+        alert_on=[("active", "idle")], alert_cooldown=0.0
     ))
     def test_watch_json_v2_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, mock_format_json_v2, _mock_sleep, _mock_stdout
@@ -1055,7 +1109,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "detect_transitions")
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
-        json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None
+        json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None,
+        alert_on=[("active", "idle")], alert_cooldown=0.0
     ))
     def test_watch_alert_first_cycle_does_not_alert(
         self, _mock_args, mock_detect, mock_alert, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
@@ -1072,10 +1127,13 @@ class TestMainWatchBehavior(unittest.TestCase):
         [{"pid": 101, "status": "idle"}],
     ])
     @patch.object(cs, "alert_transitions")
-    @patch.object(cs, "detect_transitions", return_value={101})
+    @patch.object(cs, "detect_transitions", return_value=[
+        {"pid": 101, "from": "active", "to": "idle"},
+    ])
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
-        json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None
+        json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None,
+        alert_on=[("active", "idle")], alert_cooldown=0.0
     ))
     def test_watch_alert_second_cycle_checks_transitions(
         self, _mock_args, mock_detect, mock_alert, mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
@@ -1085,8 +1143,14 @@ class TestMainWatchBehavior(unittest.TestCase):
         mock_detect.assert_called_once_with(
             {101: "active"},
             [{"pid": 101, "status": "idle"}],
+            [("active", "idle")],
         )
-        mock_alert.assert_called_once_with([{"pid": 101, "status": "idle"}], {101})
+        mock_alert.assert_called_once_with(
+            [{"pid": 101, "status": "idle"}],
+            [{"pid": 101, "from": "active", "to": "idle"}],
+            cooldown_seconds=0.0,
+            last_alerts=ANY,
+        )
 
 
 if __name__ == "__main__":

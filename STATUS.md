@@ -1,6 +1,6 @@
 # Status Quo
 
-Last updated: 2026-02-20
+Last updated: 2026-02-22
 
 ## Current behavior
 
@@ -15,6 +15,7 @@ Last updated: 2026-02-20
 - `--watch --json` emits JSON snapshots without screen-clear escape codes.
 - `--json-v2` emits a stable JSON envelope (`schema_version`, `generated_at`, `sessions`).
 - `--alert` in watch mode notifies on `active -> idle` transitions.
+- `--alert-on` and `--alert-cooldown` allow configuring alerted transitions and cooldowns.
 - `--goto` matches by project with priority: exact, then prefix, then substring.
 - `--goto` focuses matching Ghostty surface when available.
 - `--watch` supports adaptive polling with `--interval-active` and `--interval-idle`.

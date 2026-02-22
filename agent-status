@@ -18,6 +18,8 @@ CPU_THRESHOLD_ENV_VAR = "AGENT_STATUS_CPU_THRESHOLD"
 LEGACY_CPU_THRESHOLD_ENV_VAR = "CLAUDE_STATUS_CPU_THRESHOLD"
 JSON_V2_SCHEMA_VERSION = 1
 GHOSTTY_SURFACE_RE = re.compile(r"(?:^|\s)GHOSTTY_SURFACE_ID=([^\s]+)")
+ALERT_STATUSES = {"active", "idle", "stopped"}
+DEFAULT_ALERT_ON = [("active", "idle")]
 
 
 def positive_float(value):
@@ -34,6 +36,47 @@ def non_negative_float(value):
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be >= 0")
     return parsed
+
+
+def parse_alert_on(raw_values):
+    """Parse alert transition specifiers like 'active->idle,active->stopped'."""
+    if not raw_values:
+        return list(DEFAULT_ALERT_ON)
+
+    transitions = []
+    seen = set()
+    for raw in raw_values:
+        if raw is None:
+            continue
+        for chunk in raw.split(","):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            if "->" not in chunk:
+                raise ValueError(
+                    f"invalid transition '{chunk}'; expected format 'from->to'"
+                )
+            parts = chunk.split("->")
+            if len(parts) != 2:
+                raise ValueError(
+                    f"invalid transition '{chunk}'; expected format 'from->to'"
+                )
+            from_status = parts[0].strip()
+            to_status = parts[1].strip()
+            if from_status not in ALERT_STATUSES or to_status not in ALERT_STATUSES:
+                raise ValueError(
+                    f"invalid transition '{chunk}'; valid statuses: "
+                    f"{', '.join(sorted(ALERT_STATUSES))}"
+                )
+            key = (from_status, to_status)
+            if key not in seen:
+                transitions.append(key)
+                seen.add(key)
+
+    if not transitions:
+        return list(DEFAULT_ALERT_ON)
+
+    return transitions
 
 
 def parse_args():
@@ -67,6 +110,22 @@ def parse_args():
         help="notify when a session goes from active to idle (use with --watch)",
     )
     parser.add_argument(
+        "--alert-on",
+        action="append",
+        metavar="TRANSITIONS",
+        help=(
+            "comma-separated transitions to alert on, e.g. 'active->idle,active->stopped' "
+            "(default: active->idle)"
+        ),
+    )
+    parser.add_argument(
+        "--alert-cooldown",
+        type=non_negative_float,
+        default=0.0,
+        metavar="SECS",
+        help="minimum seconds between alerts for the same session/transition (default: 0)",
+    )
+    parser.add_argument(
         "--goto", metavar="PROJECT",
         help="focus the Ghostty tab running a session matching PROJECT",
     )
@@ -80,7 +139,12 @@ def parse_args():
             "(default: 5.0, or AGENT_STATUS_CPU_THRESHOLD)"
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    try:
+        args.alert_on = parse_alert_on(args.alert_on)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
 
 
 def discover_claude_pids():
@@ -378,12 +442,24 @@ def send_bell():
     sys.stdout.flush()
 
 
-def send_notification(session):
-    """Send a macOS desktop notification for a session."""
+def transition_message(from_status, to_status):
+    """Return a human-readable message for a transition."""
+    if from_status == "active" and to_status == "idle":
+        return "Waiting for input"
+    if to_status == "stopped":
+        return "Session stopped"
+    if to_status == "active":
+        return "Session active"
+    return f"Status changed: {from_status} -> {to_status}"
+
+
+def send_notification(session, transition):
+    """Send a macOS desktop notification for a session transition."""
     project = session.get("project", "unknown")
+    message = transition_message(transition["from"], transition["to"])
     script = (
         'on run argv\n'
-        'display notification "Waiting for input" with title "agent-status" subtitle (item 1 of argv)\n'
+        'display notification (item 2 of argv) with title "agent-status" subtitle (item 1 of argv)\n'
         "end run"
     )
     try:
@@ -392,6 +468,7 @@ def send_notification(session):
                 "osascript", "-e",
                 script,
                 project,
+                message,
             ],
             capture_output=True,
             timeout=5,
@@ -400,25 +477,48 @@ def send_notification(session):
         pass
 
 
-def detect_transitions(previous_statuses, sessions):
-    """Return set of PIDs that transitioned from active to idle."""
-    transitioned = set()
+def detect_transitions(previous_statuses, sessions, alert_on):
+    """Return list of transitions that match alert_on."""
+    transitions = []
+    alert_set = set(alert_on)
     for s in sessions:
         pid = s["pid"]
-        if pid in previous_statuses and previous_statuses[pid] == "active" and s["status"] == "idle":
-            transitioned.add(pid)
-    return transitioned
+        previous = previous_statuses.get(pid)
+        if not previous:
+            continue
+        current = s["status"]
+        if (previous, current) in alert_set:
+            transitions.append({"pid": pid, "from": previous, "to": current})
+    return transitions
 
 
-def alert_transitions(sessions, transitioned_pids):
-    """Send bell + desktop notifications for sessions that finished working."""
-    if not transitioned_pids:
-        return
-    send_bell()
+def alert_transitions(sessions, transitions, cooldown_seconds=0.0, last_alerts=None):
+    """Send bell + desktop notifications for alertable transitions."""
+    if not transitions:
+        return []
+    now = time.monotonic()
+    alerted = []
     pid_to_session = {s["pid"]: s for s in sessions}
-    for pid in transitioned_pids:
-        if pid in pid_to_session:
-            send_notification(pid_to_session[pid])
+
+    for transition in transitions:
+        key = (transition["pid"], transition["from"], transition["to"])
+        if last_alerts is not None and cooldown_seconds > 0:
+            last = last_alerts.get(key)
+            if last is not None and (now - last) < cooldown_seconds:
+                continue
+        alerted.append(transition)
+        if last_alerts is not None:
+            last_alerts[key] = now
+
+    if not alerted:
+        return []
+
+    send_bell()
+    for transition in alerted:
+        session = pid_to_session.get(transition["pid"])
+        if session:
+            send_notification(session, transition)
+    return alerted
 
 
 def disambiguate_projects(sessions):
@@ -507,7 +607,6 @@ def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
         status = classify_status(info["cpu"], info["state"], cpu_threshold=cpu_threshold)
         uptime_seconds, uptime = uptime_futures[pid].result()
         branch = branch_results.get(cwd)
-
         sessions.append(
             {
                 "pid": pid,
@@ -730,6 +829,8 @@ def main():
     if args.watch:
         cache = {}
         previous_statuses = {}
+        last_alerts = {}
+        alert_on = args.alert_on
         try:
             while True:
                 if not json_output:
@@ -738,8 +839,18 @@ def main():
 
                 transitioned_pids = set()
                 if args.alert and previous_statuses:
-                    transitioned_pids = detect_transitions(previous_statuses, sessions)
-                    alert_transitions(sessions, transitioned_pids)
+                    transitions = detect_transitions(previous_statuses, sessions, alert_on)
+                    transitioned_pids = {
+                        t["pid"]
+                        for t in transitions
+                        if t["from"] == "active" and t["to"] == "idle"
+                    }
+                    alert_transitions(
+                        sessions,
+                        transitions,
+                        cooldown_seconds=args.alert_cooldown,
+                        last_alerts=last_alerts,
+                    )
 
                 previous_statuses = {s["pid"]: s["status"] for s in sessions}
 

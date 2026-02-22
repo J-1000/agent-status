@@ -35,12 +35,23 @@ agent-status --watch --json       # stream JSON snapshots (no screen clear)
 agent-status --watch --json-v2    # stream versioned JSON envelopes
 agent-status --goto api-server    # focus the Ghostty tab for a session
 agent-status --watch --alert      # get notified when a session finishes
+agent-status --watch --alert --alert-on active->stopped # notify on additional transitions
+agent-status --watch --alert --alert-cooldown 10 # suppress repeat alerts for 10s
 agent-status --cpu-threshold 2.5  # tune active/idle classification
 ```
 
 ## Alerts
 
 Use `--alert` with `--watch` to get notified when a Claude/Codex session transitions from **active** to **idle** (i.e., the agent finished working and is waiting for input). Fires a terminal bell and a macOS desktop notification for each session.
+
+To alert on other transitions, pass `--alert-on` with one or more `from->to` transitions (comma-separated or repeated):
+
+```
+agent-status --watch --alert --alert-on active->idle,active->stopped
+agent-status --watch --alert --alert-on idle->active --alert-on active->stopped
+```
+
+Use `--alert-cooldown SECS` to suppress repeated alerts for the same session/transition within a time window.
 
 ## Focusing Sessions
 
