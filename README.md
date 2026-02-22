@@ -37,6 +37,8 @@ agent-status --goto api-server    # focus the Ghostty tab for a session
 agent-status --watch --alert      # get notified when a session finishes
 agent-status --watch --alert --alert-on active->stopped # notify on additional transitions
 agent-status --watch --alert --alert-cooldown 10 # suppress repeat alerts for 10s
+agent-status --no-task            # hide registered task column in table output
+agent-status --task-width 32      # set max task column width
 agent-status --cpu-threshold 2.5  # tune active/idle classification
 ```
 
@@ -52,6 +54,11 @@ agent-status --watch --alert --alert-on idle->active --alert-on active->stopped
 ```
 
 Use `--alert-cooldown SECS` to suppress repeated alerts for the same session/transition within a time window.
+
+## Task Column
+
+If you register sessions via `cc`, the table output includes a task column by default.
+Hide it with `--no-task` or adjust width via `--task-width CHARS`.
 
 ## Registration Wrapper
 

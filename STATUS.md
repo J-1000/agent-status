@@ -20,6 +20,7 @@ Last updated: 2026-02-22
 - `--goto` focuses matching Ghostty surface when available.
 - `--watch` supports adaptive polling with `--interval-active` and `--interval-idle`.
 - `cc` wrapper registers sessions with task metadata in `~/.agent-status/registrations.jsonl`.
+- Table output includes registered task column by default; `--no-task` and `--task-width` control it.
 
 ## Input constraints
 

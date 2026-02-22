@@ -40,6 +40,14 @@ def non_negative_float(value):
     return parsed
 
 
+def positive_int(value):
+    """argparse type that accepts only integer values > 0."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be > 0")
+    return parsed
+
+
 def parse_alert_on(raw_values):
     """Parse alert transition specifiers like 'active->idle,active->stopped'."""
     if not raw_values:
@@ -126,6 +134,18 @@ def parse_args():
         default=0.0,
         metavar="SECS",
         help="minimum seconds between alerts for the same session/transition (default: 0)",
+    )
+    parser.add_argument(
+        "--no-task",
+        action="store_true",
+        help="omit registered task column from table output",
+    )
+    parser.add_argument(
+        "--task-width",
+        type=positive_int,
+        default=24,
+        metavar="CHARS",
+        help="maximum width for task column in table output (default: 24)",
     )
     parser.add_argument(
         "--goto", metavar="PROJECT",
@@ -684,7 +704,21 @@ RESET = "\033[0m"
 YELLOW = "\033[33m"
 
 
-def format_table(sessions, transitioned_pids=None):
+def truncate_value(value, width):
+    """Truncate a string to width, adding ellipsis if needed."""
+    if width <= 0:
+        return ""
+    if value is None:
+        return "-"
+    text = str(value)
+    if len(text) <= width:
+        return text
+    if width == 1:
+        return "\u2026"
+    return f"{text[: width - 1]}\u2026"
+
+
+def format_table(sessions, transitioned_pids=None, show_task=True, task_width=24):
     """Format sessions as an aligned table with optional ANSI colors."""
     if not sessions:
         return "  No active Claude/Codex sessions found.\n"
@@ -698,6 +732,12 @@ def format_table(sessions, transitioned_pids=None):
     max_branch = max(len(s.get("branch") or "-") for s in sessions)
     max_label = max(len(STATUS_DISPLAY[s["status"]]["label"]) for s in sessions)
     max_uptime = max(len(s.get("uptime", "-")) for s in sessions)
+    max_task = 0
+    if show_task:
+        max_task = min(
+            task_width,
+            max(len(truncate_value(s.get("task"), task_width)) for s in sessions),
+        )
 
     for s in sessions:
         disp = STATUS_DISPLAY[s["status"]]
@@ -706,13 +746,17 @@ def format_table(sessions, transitioned_pids=None):
         branch = s.get("branch") or "-"
         uptime = s.get("uptime", "-")
         identifier = s["surface_id"][:8] if s["surface_id"] else s["tty"]
+        task = truncate_value(s.get("task"), task_width) if show_task else ""
 
         if use_color:
             icon_str = f'{disp["color"]}{icon}{RESET}'
         else:
             icon_str = icon
 
-        line = f"  {icon_str} {s['project']:<{max_project}}  {branch:<{max_branch}}  {label:<{max_label}}  {uptime:<{max_uptime}}  {identifier}"
+        line = f"  {icon_str} {s['project']:<{max_project}}  {branch:<{max_branch}}  {label:<{max_label}}  {uptime:<{max_uptime}}"
+        if show_task:
+            line += f"  {task:<{max_task}}"
+        line += f"  {identifier}"
 
         if s.get("pid") in transitioned_pids:
             if use_color:
@@ -768,13 +812,19 @@ def resolve_watch_interval(args, sessions):
     return args.interval_idle if args.interval_idle is not None else args.interval
 
 
-def print_snapshot(json_output=False, cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
+def print_snapshot(
+    json_output=False,
+    cache=None,
+    cpu_threshold=DEFAULT_CPU_THRESHOLD,
+    show_task=True,
+    task_width=24,
+):
     """Collect and print one snapshot."""
     sessions = collect_sessions(cache=cache, cpu_threshold=cpu_threshold)
     if json_output:
         sys.stdout.write(format_json(sessions))
     else:
-        sys.stdout.write(format_table(sessions))
+        sys.stdout.write(format_table(sessions, show_task=show_task, task_width=task_width))
 
 
 def clear_screen():
@@ -857,6 +907,8 @@ def main():
     args = parse_args()
     cpu_threshold = resolve_cpu_threshold(args)
     json_output = args.json_output or args.json_v2
+    show_task = not args.no_task
+    task_width = args.task_width
 
     if args.goto:
         sys.exit(handle_goto(args.goto, cpu_threshold=cpu_threshold))
@@ -894,7 +946,14 @@ def main():
                 elif args.json_output:
                     sys.stdout.write(format_json(sessions))
                 else:
-                    sys.stdout.write(format_table(sessions, transitioned_pids=transitioned_pids))
+                    sys.stdout.write(
+                        format_table(
+                            sessions,
+                            transitioned_pids=transitioned_pids,
+                            show_task=show_task,
+                            task_width=task_width,
+                        )
+                    )
                 time.sleep(resolve_watch_interval(args, sessions))
         except KeyboardInterrupt:
             pass
@@ -903,7 +962,12 @@ def main():
             sessions = collect_sessions(cpu_threshold=cpu_threshold)
             sys.stdout.write(format_json_v2(sessions))
         else:
-            print_snapshot(json_output=args.json_output, cpu_threshold=cpu_threshold)
+            print_snapshot(
+                json_output=args.json_output,
+                cpu_threshold=cpu_threshold,
+                show_task=show_task,
+                task_width=task_width,
+            )
 
 
 if __name__ == "__main__":

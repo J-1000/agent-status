@@ -190,6 +190,25 @@ class TestLoadRegistrations(unittest.TestCase):
         finally:
             os.unlink(path)
 
+
+class TestFormatTable(unittest.TestCase):
+    def test_task_column_truncates(self):
+        sessions = [
+            {
+                "pid": 100,
+                "project": "api",
+                "branch": "main",
+                "status": "idle",
+                "cpu": 0.0,
+                "tty": "ttys001",
+                "surface_id": None,
+                "uptime": "1m",
+                "task": "ship-longer-than-width",
+            }
+        ]
+        output = cs.format_table(sessions, show_task=True, task_width=6)
+        self.assertIn("ship-\u2026", output)
+
     def test_ignores_invalid_json(self):
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as handle:
             handle.write("{bad json}\n")
@@ -925,6 +944,22 @@ class TestParseArgs(unittest.TestCase):
         args = cs.parse_args()
         self.assertEqual(args.alert_cooldown, 2.5)
 
+    @patch("sys.argv", ["agent-status", "--task-width", "32"])
+    def test_task_width_flag(self):
+        args = cs.parse_args()
+        self.assertEqual(args.task_width, 32)
+
+    @patch("sys.argv", ["agent-status", "--task-width", "0"])
+    def test_task_width_zero_rejected(self):
+        with patch("sys.stderr", new=io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cs.parse_args()
+
+    @patch("sys.argv", ["agent-status", "--no-task"])
+    def test_no_task_flag(self):
+        args = cs.parse_args()
+        self.assertTrue(args.no_task)
+
 
 class TestResolveWatchInterval(unittest.TestCase):
     def _args(self, interval=2.0, interval_active=None, interval_idle=None):
@@ -1094,7 +1129,7 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=True, json_v2=False, alert=False, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
     ))
     def test_watch_json_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep, _mock_stdout
@@ -1110,7 +1145,7 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=False, alert=False, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
     ))
     def test_watch_table_clears_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
@@ -1126,7 +1161,7 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=True, alert=False, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
     ))
     def test_watch_json_v2_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, mock_format_json_v2, _mock_sleep, _mock_stdout
@@ -1144,7 +1179,7 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
     ))
     def test_watch_alert_first_cycle_does_not_alert(
         self, _mock_args, mock_detect, mock_alert, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
@@ -1167,7 +1202,7 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
     ))
     def test_watch_alert_second_cycle_checks_transitions(
         self, _mock_args, mock_detect, mock_alert, mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
