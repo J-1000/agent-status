@@ -39,6 +39,8 @@ agent-status --watch --alert --alert-on active->stopped # notify on additional t
 agent-status --watch --alert --alert-cooldown 10 # suppress repeat alerts for 10s
 agent-status --no-task            # hide registered task column in table output
 agent-status --task-width 32      # set max task column width
+agent-status --registry-compact   # compact the registry file and exit
+agent-status --registry-keep 500  # keep last 500 registry entries on compact
 agent-status --cpu-threshold 2.5  # tune active/idle classification
 ```
 
@@ -70,6 +72,11 @@ Use the `cc` wrapper to register a session with metadata (task description + sta
 ```
 
 Registrations are appended to `~/.agent-status/registrations.jsonl` by default. Override with `AGENT_STATUS_REGISTRY` or `cc --registry PATH`.
+
+## Registry Cleanup
+
+Use `agent-status --registry-compact` to prune invalid entries and keep the last N valid lines (default 1000).
+Override the file with `--registry-path` and set retention with `--registry-keep`.
 
 ## Focusing Sessions
 

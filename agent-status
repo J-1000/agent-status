@@ -161,6 +161,23 @@ def parse_args():
             "(default: 5.0, or AGENT_STATUS_CPU_THRESHOLD)"
         ),
     )
+    parser.add_argument(
+        "--registry-compact",
+        action="store_true",
+        help="compact the registry file and exit",
+    )
+    parser.add_argument(
+        "--registry-keep",
+        type=positive_int,
+        default=1000,
+        metavar="COUNT",
+        help="number of recent registry entries to keep when compacting (default: 1000)",
+    )
+    parser.add_argument(
+        "--registry-path",
+        metavar="PATH",
+        help="override registry path for --registry-compact",
+    )
     args = parser.parse_args()
     try:
         args.alert_on = parse_alert_on(args.alert_on)
@@ -585,6 +602,37 @@ def load_registrations(pids, registry_path=None):
         return {}
 
 
+def compact_registry(path, keep=1000):
+    """Rewrite registry with last N valid JSON lines."""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            lines = [line.strip() for line in handle if line.strip()]
+    except FileNotFoundError:
+        return (0, 0, False)
+
+    valid_lines = []
+    for line in lines:
+        try:
+            json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        valid_lines.append(line)
+
+    if keep <= 0:
+        kept = []
+    else:
+        kept = valid_lines[-keep:]
+
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as handle:
+        for line in kept:
+            handle.write(line + "\n")
+    os.replace(tmp_path, path)
+
+    removed = max(0, len(valid_lines) - len(kept))
+    return (len(kept), removed, True)
+
+
 def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Collect all Claude/Codex session data.
 
@@ -909,6 +957,17 @@ def main():
     json_output = args.json_output or args.json_v2
     show_task = not args.no_task
     task_width = args.task_width
+    registry_path = args.registry_path or resolve_registry_path()
+
+    if args.registry_compact:
+        kept, removed, existed = compact_registry(registry_path, keep=args.registry_keep)
+        if not existed:
+            sys.stderr.write(f"  Registry not found: {registry_path}\n")
+            sys.exit(1)
+        sys.stdout.write(
+            f"  Compacted registry: kept {kept} entries, removed {removed}.\n"
+        )
+        sys.exit(0)
 
     if args.goto:
         sys.exit(handle_goto(args.goto, cpu_threshold=cpu_threshold))

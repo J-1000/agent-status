@@ -21,6 +21,7 @@ Last updated: 2026-02-22
 - `--watch` supports adaptive polling with `--interval-active` and `--interval-idle`.
 - `cc` wrapper registers sessions with task metadata in `~/.agent-status/registrations.jsonl`.
 - Table output includes registered task column by default; `--no-task` and `--task-width` control it.
+- `--registry-compact` trims the registry file to the most recent entries.
 
 ## Input constraints
 

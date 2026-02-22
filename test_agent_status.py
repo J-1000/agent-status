@@ -209,6 +209,36 @@ class TestFormatTable(unittest.TestCase):
         output = cs.format_table(sessions, show_task=True, task_width=6)
         self.assertIn("ship-\u2026", output)
 
+
+class TestCompactRegistry(unittest.TestCase):
+    def test_missing_file_returns_not_existed(self):
+        kept, removed, existed = cs.compact_registry("/nope/registry.jsonl", keep=10)
+        self.assertEqual((kept, removed, existed), (0, 0, False))
+
+    def test_compacts_to_last_n_valid_lines(self):
+        records = [
+            {"pid": 1, "task": "one"},
+            {"pid": 2, "task": "two"},
+            {"pid": 3, "task": "three"},
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as handle:
+            handle.write(json.dumps(records[0]) + "\n")
+            handle.write("{bad json}\n")
+            handle.write(json.dumps(records[1]) + "\n")
+            handle.write(json.dumps(records[2]) + "\n")
+            path = handle.name
+
+        try:
+            kept, removed, existed = cs.compact_registry(path, keep=2)
+            self.assertTrue(existed)
+            self.assertEqual(kept, 2)
+            self.assertEqual(removed, 1)
+            with open(path, "r", encoding="utf-8") as handle:
+                lines = [line.strip() for line in handle if line.strip()]
+            self.assertEqual(lines, [json.dumps(records[1]), json.dumps(records[2])])
+        finally:
+            os.unlink(path)
+
     def test_ignores_invalid_json(self):
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as handle:
             handle.write("{bad json}\n")
@@ -960,6 +990,13 @@ class TestParseArgs(unittest.TestCase):
         args = cs.parse_args()
         self.assertTrue(args.no_task)
 
+    @patch("sys.argv", ["agent-status", "--registry-compact", "--registry-keep", "10", "--registry-path", "/tmp/x"])
+    def test_registry_compact_flags(self):
+        args = cs.parse_args()
+        self.assertTrue(args.registry_compact)
+        self.assertEqual(args.registry_keep, 10)
+        self.assertEqual(args.registry_path, "/tmp/x")
+
 
 class TestResolveWatchInterval(unittest.TestCase):
     def _args(self, interval=2.0, interval_active=None, interval_idle=None):
@@ -1129,7 +1166,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=True, json_v2=False, alert=False, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24,
+        registry_compact=False, registry_keep=1000, registry_path=None
     ))
     def test_watch_json_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_json, _mock_sleep, _mock_stdout
@@ -1145,7 +1183,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=False, alert=False, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24,
+        registry_compact=False, registry_keep=1000, registry_path=None
     ))
     def test_watch_table_clears_screen(
         self, _mock_args, mock_clear, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
@@ -1161,7 +1200,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=True, alert=False, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24,
+        registry_compact=False, registry_keep=1000, registry_path=None
     ))
     def test_watch_json_v2_does_not_clear_screen(
         self, _mock_args, mock_clear, _mock_collect, mock_format_json_v2, _mock_sleep, _mock_stdout
@@ -1179,7 +1219,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24,
+        registry_compact=False, registry_keep=1000, registry_path=None
     ))
     def test_watch_alert_first_cycle_does_not_alert(
         self, _mock_args, mock_detect, mock_alert, _mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
@@ -1202,7 +1243,8 @@ class TestMainWatchBehavior(unittest.TestCase):
     @patch.object(cs, "parse_args", return_value=Namespace(
         watch=True, interval=1.0, interval_active=None, interval_idle=None,
         json_output=False, json_v2=False, alert=True, goto=None, cpu_threshold=None,
-        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24
+        alert_on=[("active", "idle")], alert_cooldown=0.0, no_task=False, task_width=24,
+        registry_compact=False, registry_keep=1000, registry_path=None
     ))
     def test_watch_alert_second_cycle_checks_transitions(
         self, _mock_args, mock_detect, mock_alert, mock_collect, _mock_format_table, _mock_sleep, _mock_stdout
