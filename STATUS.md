@@ -38,7 +38,7 @@ Last updated: 2026-02-22
 ## Verification baseline
 
 - Unit tests: `python3 -m unittest -q`
-- Latest observed result: `134 tests`, `OK`
+- Latest observed result: `147 tests`, `OK`
 
 ## PRD open-question validation
 

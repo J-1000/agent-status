@@ -46,6 +46,8 @@ $ agent-status
 
 Columns: status icon, project name (derived from directory basename), git branch, status label, uptime, Ghostty surface ID (truncated). If two projects share the same basename, disambiguate by prepending the parent directory (e.g. `work/api-server`).
 
+If a session was registered via the `cc` wrapper, include a task column by default (truncate to a reasonable width). Allow hiding it via `--no-task`.
+
 If the terminal supports color, use ANSI colors for the status icons. Fall back to plain text gracefully.
 
 ### Surface Identification
@@ -64,6 +66,10 @@ agent-status --json-v2            # output stable metadata envelope (schema + ti
 agent-status --watch --json       # stream JSON snapshots (no screen clear)
 agent-status --goto <project>     # focus the Ghostty tab for a session
 agent-status --watch --alert      # notify when a session goes active → idle
+agent-status --no-task            # hide registered task column in table output
+agent-status --task-width 32      # set max task column width
+agent-status --registry-compact   # compact the registry file and exit
+agent-status --registry-keep 500  # keep last 500 registry entries on compact
 ```
 
 ### Tab Switching (`--goto`)
@@ -116,4 +122,6 @@ Resolved in code and validation workflow:
 - ~~**Additional edge-case tests:** Expand coverage around malformed env output, partial process-info rows, and transition behavior under watch mode.~~ ✓ Shipped with targeted unit tests
 - ~~**Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file~~ ✓ Shipped as `cc` wrapper + registry file
 - ~~**Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning the agent finished and is waiting for you)~~ ✓ Shipped as `--alert`
+- ~~**Table task column:** Show registered task metadata in the table with width controls.~~ ✓ Shipped as `--no-task` / `--task-width`
+- ~~**Registry cleanup:** Compact the registration file to recent entries.~~ ✓ Shipped as `--registry-compact` / `--registry-keep`
 - **Task integration:** Read a `tasks.md` file and display alongside sessions
