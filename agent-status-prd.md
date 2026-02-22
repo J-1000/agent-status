@@ -114,6 +114,6 @@ Resolved in code and validation workflow:
 - ~~**Adaptive watch polling:** Optional backoff or split intervals for active vs idle to reduce process-inspection overhead.~~ ✓ Shipped as `--interval-active` / `--interval-idle`
 - ~~**Configurable alert events:** Allow notifying on additional transitions (`active->idle`, `active->stopped`, etc.) with cooldown controls.~~ ✓ Shipped as `--alert-on` / `--alert-cooldown`
 - ~~**Additional edge-case tests:** Expand coverage around malformed env output, partial process-info rows, and transition behavior under watch mode.~~ ✓ Shipped with targeted unit tests
-- **Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file
+- ~~**Registration wrapper:** A `cc` alias that registers sessions with richer metadata (task description, start time) into a shared file~~ ✓ Shipped as `cc` wrapper + registry file
 - ~~**Watch mode with alerts:** Notify (terminal bell or desktop notification) when a session goes from active to idle (meaning the agent finished and is waiting for you)~~ ✓ Shipped as `--alert`
 - **Task integration:** Read a `tasks.md` file and display alongside sessions

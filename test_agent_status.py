@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+import tempfile
 import unittest
 from argparse import Namespace
 from unittest.mock import patch, MagicMock, ANY
@@ -167,6 +168,39 @@ class TestAlertTransitions(unittest.TestCase):
         self.assertEqual(alerted, [])
         mock_bell.assert_not_called()
         mock_notif.assert_not_called()
+
+
+class TestLoadRegistrations(unittest.TestCase):
+    def test_missing_file_returns_empty(self):
+        self.assertEqual(cs.load_registrations([123], registry_path="/nope/path.jsonl"), {})
+
+    def test_loads_matching_pids_only(self):
+        records = [
+            {"pid": 100, "task": "one", "started_at": "2026-02-22T00:00:00Z"},
+            {"pid": 200, "task": "two", "started_at": "2026-02-22T00:00:01Z"},
+        ]
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as handle:
+            for record in records:
+                handle.write(json.dumps(record) + "\n")
+            path = handle.name
+
+        try:
+            entries = cs.load_registrations([200], registry_path=path)
+            self.assertEqual(entries, {200: records[1]})
+        finally:
+            os.unlink(path)
+
+    def test_ignores_invalid_json(self):
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as handle:
+            handle.write("{bad json}\n")
+            handle.write(json.dumps({"pid": 300, "task": "ok"}) + "\n")
+            path = handle.name
+
+        try:
+            entries = cs.load_registrations([300], registry_path=path)
+            self.assertEqual(entries, {300: {"pid": 300, "task": "ok"}})
+        finally:
+            os.unlink(path)
 
 
 class TestClassifyStatus(unittest.TestCase):

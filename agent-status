@@ -20,6 +20,8 @@ JSON_V2_SCHEMA_VERSION = 1
 GHOSTTY_SURFACE_RE = re.compile(r"(?:^|\s)GHOSTTY_SURFACE_ID=([^\s]+)")
 ALERT_STATUSES = {"active", "idle", "stopped"}
 DEFAULT_ALERT_ON = [("active", "idle")]
+REGISTRY_ENV_VAR = "AGENT_STATUS_REGISTRY"
+DEFAULT_REGISTRY_PATH = os.path.expanduser("~/.agent-status/registrations.jsonl")
 
 
 def positive_float(value):
@@ -534,6 +536,35 @@ def disambiguate_projects(sessions):
             s["project"] = f"{parent}/{s['project']}"
 
 
+def resolve_registry_path():
+    """Return registry path for session registrations."""
+    return os.environ.get(REGISTRY_ENV_VAR, DEFAULT_REGISTRY_PATH)
+
+
+def load_registrations(pids, registry_path=None):
+    """Load registration metadata for the given PIDs."""
+    if not pids:
+        return {}
+    path = registry_path or resolve_registry_path()
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            entries = {}
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                pid = record.get("pid")
+                if pid in pids:
+                    entries[pid] = record
+            return entries
+    except FileNotFoundError:
+        return {}
+
+
 def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     """Collect all Claude/Codex session data.
 
@@ -553,6 +584,7 @@ def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
     ]
     parent_map = get_parent_map(valid_pids)
     valid_pids = dedupe_nested_pids(valid_pids, parent_map)
+    registrations = load_registrations(valid_pids)
 
     # Separate cached vs uncached PIDs
     if cache is not None:
@@ -607,6 +639,7 @@ def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
         status = classify_status(info["cpu"], info["state"], cpu_threshold=cpu_threshold)
         uptime_seconds, uptime = uptime_futures[pid].result()
         branch = branch_results.get(cwd)
+        registration = registrations.get(pid, {})
         sessions.append(
             {
                 "pid": pid,
@@ -619,6 +652,8 @@ def collect_sessions(cache=None, cpu_threshold=DEFAULT_CPU_THRESHOLD):
                 "surface_id": surface_id,
                 "uptime_seconds": uptime_seconds,
                 "uptime": uptime,
+                "task": registration.get("task"),
+                "registered_at": registration.get("started_at"),
             }
         )
 

@@ -19,6 +19,7 @@ Last updated: 2026-02-22
 - `--goto` matches by project with priority: exact, then prefix, then substring.
 - `--goto` focuses matching Ghostty surface when available.
 - `--watch` supports adaptive polling with `--interval-active` and `--interval-idle`.
+- `cc` wrapper registers sessions with task metadata in `~/.agent-status/registrations.jsonl`.
 
 ## Input constraints
 

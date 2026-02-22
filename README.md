@@ -53,6 +53,17 @@ agent-status --watch --alert --alert-on idle->active --alert-on active->stopped
 
 Use `--alert-cooldown SECS` to suppress repeated alerts for the same session/transition within a time window.
 
+## Registration Wrapper
+
+Use the `cc` wrapper to register a session with metadata (task description + start time) before launching Claude/Codex:
+
+```
+./cc --task "fix auth regression" -- claude
+./cc --task "ship onboarding copy" -- codex --model gpt-5
+```
+
+Registrations are appended to `~/.agent-status/registrations.jsonl` by default. Override with `AGENT_STATUS_REGISTRY` or `cc --registry PATH`.
+
 ## Focusing Sessions
 
 Use `--goto` to switch to a running session's Ghostty tab:
